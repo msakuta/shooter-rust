@@ -1,0 +1,19 @@
+[package]
+name = "shooter-rust"
+version = "0.1.0"
+authors = ["msakuta <masahiro.sakuta@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+piston_window = "0.81.0"
+find_folder = "0.3.0"
+piston2d-sprite = "0.50.0"
+piston2d-gfx_graphics = "0.56.0"
+gfx_device_gl = "0.15.5"
+
+[dependencies.vecmath]
+
+git = "https://github.com/PistonDevelopers/vecmath"
+
+[dependencies.pistoncore-glutin_window]
+git = "https://github.com/PistonDevelopers/glutin_window"
