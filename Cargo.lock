@@ -1276,6 +1276,7 @@ dependencies = [
  "piston2d-sprite 0.50.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "piston_window 0.81.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pistoncore-glutin_window 0.54.0 (git+https://github.com/PistonDevelopers/glutin_window)",
+ "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "vecmath 0.3.1 (git+https://github.com/PistonDevelopers/vecmath)",
 ]
 
