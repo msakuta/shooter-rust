@@ -6,14 +6,18 @@ extern crate glutin_window;
 extern crate gfx_graphics;
 extern crate gfx_device_gl;
 extern crate rand;
+//extern crate sdl2_window;
 
 use std::rc::Rc;
 //use glutin_window::GlutinWindow;
 use piston_window::*;
+//use piston_window::{image, Context, G2d, G2dTexture};
 use rand::prelude::*;
 //use gfx_graphics;
 //use gfx_device_gl;
 //use sprite::*;
+//use gfx;
+//use sdl2_window::Sdl2Window;
 
 /*impl piston_window::GenericEvent for piston_window::Event{
 
@@ -21,15 +25,20 @@ use rand::prelude::*;
 
 //type GWindow = PistonWindow<GlutinWindow>;
 
+//struct EnemyG<G: Graphics>{
 struct Enemy{
     pos: [f64; 2],
     velo: [f64; 2],
+    //texture: Rc<piston_window::Graphics::Texture>
+    //texture: Rc<G::Texture>
+    //texture: Rc<gfx_raphics::Texture>
     texture: Rc<G2dTexture>
 }
 
 const width: u32 = 640;
 const height: u32 = 480;
 
+//impl<G: Graphics> EnemyG<G>{
 impl Enemy{
     fn animate(&mut self) -> bool{
         let pos = &mut self.pos;
@@ -44,6 +53,7 @@ impl Enemy{
         }
     }
 
+    #[cfg(use_generic)]
     fn draw</*G: Graphics,*/ F: FnOnce(&G2dTexture, math::Matrix2d)>(&self, context: &Context, callback: F//, g: &mut G
         /*, graphics: &mut gfx_graphics::back_end::GfxGraphics<'_, gfx_device_gl::Resources, gfx_device_gl::command::CommandBuffer>*/) -> math::Matrix2d
         {
@@ -59,7 +69,7 @@ impl Enemy{
         return tran;
     }
 
-    fn drawT<G: Graphics>(&self, context: &Context, g: &mut G) -> math::Matrix2d{
+    fn draw_tex(&self, context: &Context, g: &mut G2d){
         //let (width, height) = (640, 480);
         let pos = &self.pos;
         let mut tran: math::Matrix2d = context.transform;
@@ -67,17 +77,22 @@ impl Enemy{
         tran[1][2] = (pos[1] as f64) / height as f64;
         //Image::new().draw(self.texture.as_ref() as &<G as Graphics>::Texture, &Default::default(), tran, g);
         //let img: &<G as Graphics>::Texture = self.texture.as_ref();
-        //image(self.texture.as_ref(), tran, g);
-        return tran;
+        let tex2 = self.texture.as_ref();
+        image(tex2, tran, g);
+        //image(tex, tran, g);
     }
 }
 
+//type Enemy<'a> = EnemyG<G2d<'a>>;
+
 fn main() {
     use rand::Rng;
+    //use glutin_window::GlutinWindow;
     //let (width, height) = (640, 480);
     let mut time = 0;
     let opengl = OpenGL::V3_2;
-    let mut window: PistonWindow =
+    let mut window: PistonWindow  =
+    //let mut window: Sdl2Window =
         WindowSettings::new("Hello Piston!", [width, height])
         .exit_on_esc(true).opengl(opengl).build().unwrap();
 
@@ -110,7 +125,7 @@ fn main() {
             Flip::None,
             &TextureSettings::new()
         ).unwrap());
-    let player = Enemy{pos: [0., 100.], velo: [0., 0.], texture: player_tex};
+    let player = Enemy{pos: [0., 100.], velo: [0., 0.], texture: player_tex.clone()};
 
     let mut enemies = vec!{
         Enemy{pos: [135., 312.], velo: [0f64, 0f64], texture: enemy_tex.clone()},
@@ -121,7 +136,7 @@ fn main() {
 
     let mut bullets = Vec::<Enemy>::new();
 
-    //let mut sprite = Sprite::from_texture(tex.clone());
+    //let mut sprite = Sprite::from_texture(player_tex.clone());
     //sprite.set_position(width as f64 / 2.0, height as f64 / 2.0);
 
     //let id = scene.add_child(sprite);
@@ -138,7 +153,7 @@ fn main() {
             image(&bg, context.transform, graphics);
 
             //let im: &mut gfx_graphics::back_end::GfxGraphics<'_, gfx_device_gl::Resources, gfx_device_gl::command::CommandBuffer> = graphics;
-            player.draw(&context, |tex, tran| image(tex, tran, graphics));
+            player.draw_tex(&context, graphics);
 
             time = (time + 1) % 100;
 
@@ -156,8 +171,9 @@ fn main() {
                     to_delete.push(i);
                     continue;
                 }
-                e.draw(&context, |tex, tran| image(tex, tran, graphics)/*, &mut graphics*/);
-                //let tran = e.drawT(&context, graphics);
+                //e.draw(&context, |tex, tran| image(tex, tran, graphics)/*, &mut graphics*/);
+                e.draw_tex(&context, graphics);
+                //let tran = e.draw_tex(&context, graphics);
                 //image(e.texture.as_ref(), tran, graphics);
 
                 let x: i32 = rng.gen_range(0, 100);
@@ -181,7 +197,8 @@ fn main() {
                 if !b.animate(){
                     to_delete.push(i);
                 }
-                let tran = b.draw(&context, |tex, tran| image(tex, tran, graphics));
+                //let tran = b.draw(&context, |tex, tran| image(tex, tran, graphics));
+                b.draw_tex(&context, graphics);
                 //image(b.texture.as_ref(), tran, graphics);
             }
 
