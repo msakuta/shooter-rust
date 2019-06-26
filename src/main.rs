@@ -10,16 +10,16 @@ use std::rc::Rc;
 use piston_window::*;
 use rand::prelude::*;
 
-struct Enemy{
+struct Enemy<'a>{
     pos: [f64; 2],
     velo: [f64; 2],
-    texture: Rc<G2dTexture>
+    texture: &'a G2dTexture
 }
 
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
 
-impl Enemy{
+impl<'a> Enemy<'a>{
     fn animate(&mut self) -> bool{
         let pos = &mut self.pos;
         for i in 0..2 {
@@ -38,7 +38,7 @@ impl Enemy{
         let mut tran: math::Matrix2d = context.transform;
         tran[0][2] = (pos[0] as f64) / WIDTH as f64;
         tran[1][2] = (pos[1] as f64) / HEIGHT as f64;
-        let tex2 = self.texture.as_ref();
+        let tex2 = self.texture;
         image(tex2, tran, g);
     }
 }
@@ -80,13 +80,13 @@ fn main() {
             Flip::None,
             &TextureSettings::new()
         ).unwrap());
-    let player = Enemy{pos: [0., 100.], velo: [0., 0.], texture: player_tex.clone()};
+    let player = Enemy{pos: [0., 100.], velo: [0., 0.], texture: &player_tex};
 
     let mut enemies = vec!{
-        Enemy{pos: [135., 312.], velo: [0f64, 0f64], texture: enemy_tex.clone()},
-        Enemy{pos: [564., 152.], velo: [1f64, 0f64], texture: enemy_tex.clone()},
-        Enemy{pos: [64., 202.], velo: [1f64, 0f64], texture: enemy_tex.clone()},
-        Enemy{pos: [314., 102.], velo: [1f64, 1f64], texture: enemy_tex.clone()}
+        Enemy{pos: [135., 312.], velo: [0f64, 0f64], texture: &enemy_tex},
+        Enemy{pos: [564., 152.], velo: [1f64, 0f64], texture: &enemy_tex},
+        Enemy{pos: [64., 202.], velo: [1f64, 0f64], texture: &enemy_tex},
+        Enemy{pos: [314., 102.], velo: [1f64, 1f64], texture: &enemy_tex}
     };
 
     let mut bullets = Vec::<Enemy>::new();
@@ -108,7 +108,7 @@ fn main() {
                 enemies.push(Enemy{
                     pos: [rng.gen_range(0., WIDTH as f64), rng.gen_range(0., HEIGHT as f64)],
                     velo: [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
-                    texture: enemy_tex.clone()
+                    texture: &enemy_tex
                 })
             }
 
@@ -125,7 +125,7 @@ fn main() {
                     bullets.push(Enemy{
                         pos: e.pos,
                         velo: [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
-                        texture: bullet_tex.clone()
+                        texture: &bullet_tex
                     })
                 }
             }
