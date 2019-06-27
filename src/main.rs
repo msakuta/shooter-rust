@@ -6,7 +6,6 @@ extern crate gfx_graphics;
 extern crate gfx_device_gl;
 extern crate rand;
 
-use std::rc::Rc;
 use piston_window::*;
 use rand::prelude::*;
 
@@ -55,36 +54,42 @@ fn main() {
 
     let assets = find_folder::Search::ParentsThenKids(3, 3)
         .for_folder("assets").unwrap();
-    let rust_logo = assets.join("boss.bmp");
+
     let bg = Texture::from_path(
             &mut window.factory,
             &assets.join("bg.bmp"),
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
-    let player_tex = Rc::new(Texture::from_path(
+    let player_tex = Texture::from_path(
             &mut window.factory,
             &assets.join("player.bmp"),
             Flip::None,
             &TextureSettings::new()
-        ).unwrap());
-    let enemy_tex = Rc::new(Texture::from_path(
+        ).unwrap();
+    let boss_tex = Texture::from_path(
             &mut window.factory,
-            &rust_logo,
+            &assets.join("boss.bmp"),
             Flip::None,
             &TextureSettings::new()
-        ).unwrap());
-    let bullet_tex = Rc::new(Texture::from_path(
+        ).unwrap();
+    let enemy_tex = Texture::from_path(
+            &mut window.factory,
+            &assets.join("enemy.bmp"),
+            Flip::None,
+            &TextureSettings::new()
+        ).unwrap();
+    let bullet_tex = Texture::from_path(
             &mut window.factory,
             &assets.join("ebullet.bmp"),
             Flip::None,
             &TextureSettings::new()
-        ).unwrap());
+        ).unwrap();
     let player = Enemy{pos: [0., 100.], velo: [0., 0.], texture: &player_tex};
 
     let mut enemies = vec!{
         Enemy{pos: [135., 312.], velo: [0f64, 0f64], texture: &enemy_tex},
-        Enemy{pos: [564., 152.], velo: [1f64, 0f64], texture: &enemy_tex},
+        Enemy{pos: [564., 152.], velo: [1f64, 0f64], texture: &boss_tex},
         Enemy{pos: [64., 202.], velo: [1f64, 0f64], texture: &enemy_tex},
         Enemy{pos: [314., 102.], velo: [1f64, 1f64], texture: &enemy_tex}
     };
@@ -108,7 +113,7 @@ fn main() {
                 enemies.push(Enemy{
                     pos: [rng.gen_range(0., WIDTH as f64), rng.gen_range(0., HEIGHT as f64)],
                     velo: [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
-                    texture: &enemy_tex
+                    texture: if rng.gen_range(0, 100) < 20 { &boss_tex } else { &enemy_tex }
                 })
             }
 
@@ -131,8 +136,8 @@ fn main() {
             }
 
             for i in to_delete.iter().rev() {
-                enemies.remove(*i);
-                println!("Deleted Enemy {} / {}", *i, enemies.len());
+                let dead = enemies.remove(*i);
+                println!("Deleted Enemy {} {} / {}", if dead.texture == &boss_tex { "boss" } else {"enemy"}, *i, enemies.len());
             }
 
             to_delete.clear();
