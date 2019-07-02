@@ -70,7 +70,7 @@ fn main() {
     let mut time = 0;
     let opengl = OpenGL::V3_2;
     let mut window: PistonWindow =
-        WindowSettings::new("Hello Piston!", [WINDOW_WIDTH, WINDOW_HEIGHT])
+        WindowSettings::new("Shooter Rust", [WINDOW_WIDTH, WINDOW_HEIGHT])
         .exit_on_esc(true).opengl(opengl).build().unwrap();
 
     let assets = find_folder::Search::ParentsThenKids(3, 3)
