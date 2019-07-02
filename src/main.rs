@@ -1,13 +1,13 @@
 extern crate piston_window;
 extern crate find_folder;
 extern crate vecmath;
-extern crate glutin_window;
 extern crate gfx_graphics;
 extern crate gfx_device_gl;
 extern crate rand;
 
 use piston_window::*;
 use rand::prelude::*;
+use std::ops::{Add, Mul};
 
 struct Enemy<'a>{
     pos: [f64; 2],
@@ -19,6 +19,22 @@ const WINDOW_WIDTH: u32 = 640;
 const WINDOW_HEIGHT: u32 = 480;
 const WIDTH: u32 = WINDOW_WIDTH * 3 / 4;
 const HEIGHT: u32 = WINDOW_HEIGHT;
+const PLAYER_SPEED: f64 = 2.;
+const PLAYER_SIZE: f64 = 16.;
+
+// We cannot directly define custom operators on external types, so we wrap the matrix
+// int a tuple struct.
+struct Matrix<T>(vecmath::Matrix2x3<T>);
+
+// This is such a silly way to operator overload to enable matrix multiplication with
+// operator *.
+impl<T> Mul for Matrix<T>
+    where T: Copy + Add<T, Output = T> + Mul<T, Output = T> {
+    type Output = Self;
+    fn mul(self, o: Self) -> Self{
+        Matrix(vecmath::row_mat2x3_mul(self.0, o.0))
+    }
+}
 
 impl<'a> Enemy<'a>{
     fn animate(&mut self) -> bool{
@@ -36,11 +52,14 @@ impl<'a> Enemy<'a>{
 
     fn draw_tex(&self, context: &Context, g: &mut G2d){
         let pos = &self.pos;
+        let tex2 = self.texture;
+        let mut centerize = vecmath::mat2x3_id();
+        centerize[0][2] = -(tex2.get_width() as f64 / 2.);
+        centerize[1][2] = -(tex2.get_height() as f64 / 2.);
         let mut mytran = vecmath::mat2x3_id();
         mytran[0][2] = pos[0];
         mytran[1][2] = pos[1];
-        let tex2 = self.texture;
-        image(tex2, vecmath::row_mat2x3_mul(context.transform, mytran), g);
+        image(tex2, (Matrix(context.transform) * Matrix(mytran) * Matrix(centerize)).0, g);
     }
 }
 
@@ -50,7 +69,7 @@ fn main() {
     //let (WIDTH, HEIGHT) = (640, 480);
     let mut time = 0;
     let opengl = OpenGL::V3_2;
-    let mut window: PistonWindow  =
+    let mut window: PistonWindow =
         WindowSettings::new("Hello Piston!", [WINDOW_WIDTH, WINDOW_HEIGHT])
         .exit_on_esc(true).opengl(opengl).build().unwrap();
 
@@ -87,7 +106,7 @@ fn main() {
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
-    let player = Enemy{pos: [10., 100.], velo: [0., 0.], texture: &player_tex};
+    let mut player = Enemy{pos: [240., 400.], velo: [0., 0.], texture: &player_tex};
 
     let mut enemies = vec!{
         Enemy{pos: [135., 312.], velo: [0f64, 0f64], texture: &enemy_tex},
@@ -114,8 +133,11 @@ fn main() {
         newvp
     }
 
+    let [mut key_up, mut key_down, mut key_left, mut key_right] = [false; 4];
+
     while let Some(event) = window.next() {
 
+        if let Some(_) = event.render_args() {
         window.draw_2d(&event, |mut context, graphics| {
             clear([0.0, 0., 0., 1.], graphics);
 
@@ -123,7 +145,6 @@ fn main() {
                 let (fwidth, fheight) = (WINDOW_WIDTH as f64, WINDOW_HEIGHT as f64);
                 let ratio = fwidth / fheight;
 
-                //let [fwidth, fheight] = [WINDOW_WIDTH as f64, HEIGHT as f64];
                 let wnd_context = Context::new_viewport(limit_viewport(&viewport, ratio, WINDOW_WIDTH, WINDOW_HEIGHT));
 
                 wnd_context.trans(-1., -1.);
@@ -132,6 +153,20 @@ fn main() {
 
                 context = Context::new_viewport(limit_viewport(&viewport, ratio, WINDOW_WIDTH, WINDOW_HEIGHT));
             }
+
+            if key_up && PLAYER_SIZE <= player.pos[1] - PLAYER_SPEED {
+                player.pos[1] -= PLAYER_SPEED;
+            }
+            else if key_down && player.pos[1] + PLAYER_SPEED < HEIGHT as f64 - PLAYER_SIZE {
+                player.pos[1] += PLAYER_SPEED;
+            }
+            if key_left && PLAYER_SIZE <= player.pos[0] - PLAYER_SPEED {
+                player.pos[0] -= PLAYER_SPEED;
+            }
+            else if key_right && player.pos[0] + PLAYER_SPEED < WIDTH as f64 - PLAYER_SIZE {
+                player.pos[0] += PLAYER_SPEED;
+            }
+
 
             player.draw_tex(&context, graphics);
 
@@ -185,5 +220,25 @@ fn main() {
             //print!("time: {}, tran: {:?}\n", time, tran);
             //scene.draw(context.transform, graphics);
         });
+        }
+        // else if let Some(pos) = event.mouse_cursor_args() {
+        //     player.pos = pos;
+        // }
+        else{
+            let mut toggle_key = |opt: Option<Button>, tf: bool| {
+                if let Some(Button::Keyboard(key)) = opt {
+                    match key {
+                        Key::Up | Key::W => key_up = tf,
+                        Key::Down | Key::S => key_down = tf,
+                        Key::Left | Key::A => key_left = tf,
+                        Key::Right | Key::D => key_right = tf,
+                        _ => {}
+                    }
+                }
+            };
+            toggle_key(event.press_args(), true);
+            toggle_key(event.release_args(), false);
+        }
+
     }
 }
