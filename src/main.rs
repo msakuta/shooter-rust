@@ -15,8 +15,10 @@ struct Enemy<'a>{
     texture: &'a G2dTexture
 }
 
-const WIDTH: u32 = 640;
-const HEIGHT: u32 = 480;
+const WINDOW_WIDTH: u32 = 640;
+const WINDOW_HEIGHT: u32 = 480;
+const WIDTH: u32 = WINDOW_WIDTH * 3 / 4;
+const HEIGHT: u32 = WINDOW_HEIGHT;
 
 impl<'a> Enemy<'a>{
     fn animate(&mut self) -> bool{
@@ -34,11 +36,11 @@ impl<'a> Enemy<'a>{
 
     fn draw_tex(&self, context: &Context, g: &mut G2d){
         let pos = &self.pos;
-        let mut tran: math::Matrix2d = context.transform;
-        tran[0][2] = (pos[0] as f64) / WIDTH as f64;
-        tran[1][2] = (pos[1] as f64) / HEIGHT as f64;
+        let mut mytran = vecmath::mat2x3_id();
+        mytran[0][2] = pos[0];
+        mytran[1][2] = pos[1];
         let tex2 = self.texture;
-        image(tex2, tran, g);
+        image(tex2, vecmath::row_mat2x3_mul(context.transform, mytran), g);
     }
 }
 
@@ -49,7 +51,7 @@ fn main() {
     let mut time = 0;
     let opengl = OpenGL::V3_2;
     let mut window: PistonWindow  =
-        WindowSettings::new("Hello Piston!", [WIDTH, HEIGHT])
+        WindowSettings::new("Hello Piston!", [WINDOW_WIDTH, WINDOW_HEIGHT])
         .exit_on_esc(true).opengl(opengl).build().unwrap();
 
     let assets = find_folder::Search::ParentsThenKids(3, 3)
@@ -85,7 +87,7 @@ fn main() {
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
-    let player = Enemy{pos: [0., 100.], velo: [0., 0.], texture: &player_tex};
+    let player = Enemy{pos: [10., 100.], velo: [0., 0.], texture: &player_tex};
 
     let mut enemies = vec!{
         Enemy{pos: [135., 312.], velo: [0f64, 0f64], texture: &enemy_tex},
@@ -98,12 +100,38 @@ fn main() {
 
     let mut rng = thread_rng();
 
+    fn limit_viewport(viewport: &Viewport, ratio: f64, wwidth: u32, wheight: u32) -> Viewport{
+        let vp_ratio = (viewport.rect[2] - viewport.rect[0]) as f64 /
+            (viewport.rect[3] - viewport.rect[0]) as f64;
+        let mut newvp = *viewport;
+        newvp.window_size[0] = (wwidth as f64 * (vp_ratio / ratio).max(1.)) as u32;
+        newvp.window_size[1] = (wheight as f64 * (ratio / vp_ratio).max(1.)) as u32;
+        #[cfg(debug)]
+        for (vp, name) in [(viewport, "Old"), (&newvp, "New")].iter() {
+            println!("{} Context: ratio: {} vp.rect: {:?} vp.draw: {:?} vp.window: {:?}",
+                name, ratio, vp.rect, vp.draw_size, vp.window_size);
+        }
+        newvp
+    }
+
     while let Some(event) = window.next() {
 
-        window.draw_2d(&event, |context, graphics| {
+        window.draw_2d(&event, |mut context, graphics| {
             clear([0.0, 0., 0., 1.], graphics);
 
-            image(&bg, context.transform, graphics);
+            if let Some(viewport) = context.viewport {
+                let (fwidth, fheight) = (WINDOW_WIDTH as f64, WINDOW_HEIGHT as f64);
+                let ratio = fwidth / fheight;
+
+                //let [fwidth, fheight] = [WINDOW_WIDTH as f64, HEIGHT as f64];
+                let wnd_context = Context::new_viewport(limit_viewport(&viewport, ratio, WINDOW_WIDTH, WINDOW_HEIGHT));
+
+                wnd_context.trans(-1., -1.);
+
+                image(&bg, wnd_context.transform, graphics);
+
+                context = Context::new_viewport(limit_viewport(&viewport, ratio, WINDOW_WIDTH, WINDOW_HEIGHT));
+            }
 
             player.draw_tex(&context, graphics);
 
