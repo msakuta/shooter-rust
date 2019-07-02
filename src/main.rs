@@ -88,6 +88,30 @@ impl<'a> Bullet<'a>{
     }
 }
 
+type TempEntity<'a> = Entity<'a>;
+
+impl<'a> TempEntity<'a>{
+    fn animate_temp(&mut self) -> bool{
+        self.health -= 1;
+        self.animate()
+    }
+
+    fn draw_temp(&self, context: &Context, g: &mut G2d){
+        let pos = &self.pos;
+        let tex2 = self.texture;
+        let mut centerize = vecmath::mat2x3_id();
+        centerize[0][2] = -(tex2.get_width() as f64 / 2.);
+        centerize[1][2] = -(tex2.get_height() as f64 / 2.);
+        let mut mytran = vecmath::mat2x3_id();
+        mytran[0][2] = pos[0];
+        mytran[1][2] = pos[1];
+        let frame = (self.health / 2) as u32;
+        let clipped = context.draw_state.scissor([frame * 16, 16, frame * 16 + 16, 16]);
+        //g.rectangle(r: &Rectangle, rectangle: R, draw_state: &DrawState, transform: Matrix2d)
+        Image::new().draw(tex2, &context.draw_state, (Matrix(context.transform) * Matrix(mytran) * Matrix(centerize)).0, g);
+    }
+}
+
 fn main() {
     use rand::Rng;
     //use glutin_window::GlutinWindow;
@@ -137,11 +161,19 @@ fn main() {
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
+    let explode_tex = Texture::from_path(
+            &mut window.factory,
+            &assets.join("explode.bmp"),
+            Flip::None,
+            &TextureSettings::new()
+        ).unwrap();
     let mut player = Enemy{pos: [240., 400.], velo: [0., 0.], health: 1, texture: &player_tex};
 
     let mut enemies = Vec::<Enemy>::new();
 
     let mut bullets = Vec::<Bullet>::new();
+
+    let mut tent = Vec::<TempEntity>::new();
 
     let mut rng = thread_rng();
 
@@ -194,12 +226,14 @@ fn main() {
             }
 
             if key_shoot && time % 3 == 0 {
+                for i in -1..2 {
                     bullets.push(Bullet(Entity{
                         pos: player.pos,
-                        velo: [0., -5.],
+                        velo: [i as f64, -5.],
                         health: 1,
                         texture: &bullet_tex
                     }, true))
+                }
             }
 
             player.draw_tex(&context, graphics);
@@ -245,13 +279,34 @@ fn main() {
             for (i,b) in &mut bullets.iter_mut().enumerate() {
                 if !b.animate_bullet(&mut enemies){
                     to_delete.push(i);
+                    tent.push(Entity{
+                        pos: b.0.pos,
+                        velo: [0., 0.],
+                        health: 16,
+                        texture: &explode_tex
+                    })
                 }
                 b.0.draw_tex(&context, graphics);
             }
 
             for i in to_delete.iter().rev() {
                 bullets.remove(*i);
-                println!("Deleted bullet {} / {}", *i, bullets.len());
+                //println!("Deleted bullet {} / {}", *i, bullets.len());
+            }
+
+            to_delete.clear();
+
+            for (i, e) in &mut ((&mut tent).iter_mut().enumerate()) {
+                if !e.animate_temp() {
+                    to_delete.push(i);
+                    continue;
+                }
+                e.draw_temp(&context, graphics);
+            }
+
+            for i in to_delete.iter().rev() {
+                tent.remove(*i);
+                println!("Deleted tent {} / {}", *i, bullets.len());
             }
 
             //print!("time: {}, tran: {:?}\n", time, tran);
