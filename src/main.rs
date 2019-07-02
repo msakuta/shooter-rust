@@ -125,8 +125,8 @@ fn main() {
                 }
                 e.draw_tex(&context, graphics);
 
-                let x: i32 = rng.gen_range(0, 100);
-                if x < 2 {
+                let x: i32 = rng.gen_range(0, if e.texture == &boss_tex { 16 } else { 64 });
+                if x == 0 {
                     bullets.push(Enemy{
                         pos: e.pos,
                         velo: [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
