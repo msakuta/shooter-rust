@@ -9,9 +9,10 @@ use piston_window::*;
 use rand::prelude::*;
 use std::ops::{Add, Mul};
 
-struct Enemy<'a>{
+struct Entity<'a>{
     pos: [f64; 2],
     velo: [f64; 2],
+    health: i32,
     texture: &'a G2dTexture
 }
 
@@ -36,13 +37,13 @@ impl<T> Mul for Matrix<T>
     }
 }
 
-impl<'a> Enemy<'a>{
+impl<'a> Entity<'a>{
     fn animate(&mut self) -> bool{
         let pos = &mut self.pos;
         for i in 0..2 {
             pos[i] = pos[i] + self.velo[i];
         }
-        if pos[0] < 0. || (WIDTH as f64) < pos[0] || pos[1] < 0. || (HEIGHT as f64) < pos[1] {
+        if self.health <= 0 || pos[0] < 0. || (WIDTH as f64) < pos[0] || pos[1] < 0. || (HEIGHT as f64) < pos[1] {
             false
         }
         else{
@@ -60,6 +61,30 @@ impl<'a> Enemy<'a>{
         mytran[0][2] = pos[0];
         mytran[1][2] = pos[1];
         image(tex2, (Matrix(context.transform) * Matrix(mytran) * Matrix(centerize)).0, g);
+    }
+}
+
+type Enemy<'a> = Entity<'a>;
+
+struct Bullet<'a>(Entity<'a>, bool);
+
+const ENEMY_SIZE: f64 = 8.;
+const BULLET_SIZE: f64 = 8.;
+
+impl<'a> Bullet<'a>{
+    fn animate_bullet(&mut self, enemies: &mut Vec<Enemy>) -> bool{
+        let ent = &mut self.0;
+        if self.1 {
+            for e in enemies.iter_mut() {
+                if ent.pos[0] - BULLET_SIZE < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < ent.pos[0] + BULLET_SIZE &&
+                    ent.pos[1] - BULLET_SIZE < e.pos[1] + ENEMY_SIZE && e.pos[1] - ENEMY_SIZE < ent.pos[1] + BULLET_SIZE {
+                        e.health -= ent.health;
+                        ent.health = 0;
+                        break;
+                    }
+            }
+        }
+        ent.animate()
     }
 }
 
@@ -100,22 +125,23 @@ fn main() {
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
-    let bullet_tex = Texture::from_path(
+    let ebullet_tex = Texture::from_path(
             &mut window.factory,
             &assets.join("ebullet.bmp"),
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
-    let mut player = Enemy{pos: [240., 400.], velo: [0., 0.], texture: &player_tex};
+    let bullet_tex = Texture::from_path(
+            &mut window.factory,
+            &assets.join("bullet.bmp"),
+            Flip::None,
+            &TextureSettings::new()
+        ).unwrap();
+    let mut player = Enemy{pos: [240., 400.], velo: [0., 0.], health: 1, texture: &player_tex};
 
-    let mut enemies = vec!{
-        Enemy{pos: [135., 312.], velo: [0f64, 0f64], texture: &enemy_tex},
-        Enemy{pos: [564., 152.], velo: [1f64, 0f64], texture: &boss_tex},
-        Enemy{pos: [64., 202.], velo: [1f64, 0f64], texture: &enemy_tex},
-        Enemy{pos: [314., 102.], velo: [1f64, 1f64], texture: &enemy_tex}
-    };
+    let mut enemies = Vec::<Enemy>::new();
 
-    let mut bullets = Vec::<Enemy>::new();
+    let mut bullets = Vec::<Bullet>::new();
 
     let mut rng = thread_rng();
 
@@ -133,7 +159,7 @@ fn main() {
         newvp
     }
 
-    let [mut key_up, mut key_down, mut key_left, mut key_right] = [false; 4];
+    let [mut key_up, mut key_down, mut key_left, mut key_right, mut key_shoot] = [false; 5];
 
     while let Some(event) = window.next() {
 
@@ -167,16 +193,26 @@ fn main() {
                 player.pos[0] += PLAYER_SPEED;
             }
 
+            if key_shoot && time % 3 == 0 {
+                    bullets.push(Bullet(Entity{
+                        pos: player.pos,
+                        velo: [0., -5.],
+                        health: 1,
+                        texture: &bullet_tex
+                    }, true))
+            }
 
             player.draw_tex(&context, graphics);
 
             time = (time + 1) % 100;
 
             if rng.gen_range(0, 100) < 1 {
+                let boss = rng.gen_range(0, 100) < 20;
                 enemies.push(Enemy{
                     pos: [rng.gen_range(0., WIDTH as f64), rng.gen_range(0., HEIGHT as f64)],
                     velo: [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
-                    texture: if rng.gen_range(0, 100) < 20 { &boss_tex } else { &enemy_tex }
+                    health: if boss { 64 } else { 3 },
+                    texture: if boss { &boss_tex } else { &enemy_tex }
                 })
             }
 
@@ -190,11 +226,12 @@ fn main() {
 
                 let x: i32 = rng.gen_range(0, if e.texture == &boss_tex { 16 } else { 64 });
                 if x == 0 {
-                    bullets.push(Enemy{
+                    bullets.push(Bullet(Entity{
                         pos: e.pos,
                         velo: [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
-                        texture: &bullet_tex
-                    })
+                        health: 1,
+                        texture: &ebullet_tex
+                    }, false))
                 }
             }
 
@@ -206,10 +243,10 @@ fn main() {
             to_delete.clear();
 
             for (i,b) in &mut bullets.iter_mut().enumerate() {
-                if !b.animate(){
+                if !b.animate_bullet(&mut enemies){
                     to_delete.push(i);
                 }
-                b.draw_tex(&context, graphics);
+                b.0.draw_tex(&context, graphics);
             }
 
             for i in to_delete.iter().rev() {
@@ -232,6 +269,7 @@ fn main() {
                         Key::Down | Key::S => key_down = tf,
                         Key::Left | Key::A => key_left = tf,
                         Key::Right | Key::D => key_right = tf,
+                        Key::C => key_shoot = tf,
                         _ => {}
                     }
                 }
