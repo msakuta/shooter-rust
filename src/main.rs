@@ -7,66 +7,17 @@ extern crate rand;
 
 use piston_window::*;
 use rand::prelude::*;
-use std::ops::{Add, Mul};
 use piston_window::draw_state::Blend;
 
-struct Entity<'a>{
-    pos: [f64; 2],
-    velo: [f64; 2],
-    health: i32,
-    blend: Option<Blend>,
-    texture: &'a G2dTexture
-}
+mod consts;
+mod entity;
 
-const WINDOW_WIDTH: u32 = 640;
-const WINDOW_HEIGHT: u32 = 480;
-const WIDTH: u32 = WINDOW_WIDTH * 3 / 4;
-const HEIGHT: u32 = WINDOW_HEIGHT;
+use consts::*;
+use crate::entity::{Entity, Matrix};
+
 const PLAYER_SPEED: f64 = 2.;
 const PLAYER_SIZE: f64 = 16.;
 
-// We cannot directly define custom operators on external types, so we wrap the matrix
-// int a tuple struct.
-struct Matrix<T>(vecmath::Matrix2x3<T>);
-
-// This is such a silly way to operator overload to enable matrix multiplication with
-// operator *.
-impl<T> Mul for Matrix<T>
-    where T: Copy + Add<T, Output = T> + Mul<T, Output = T> {
-    type Output = Self;
-    fn mul(self, o: Self) -> Self{
-        Matrix(vecmath::row_mat2x3_mul(self.0, o.0))
-    }
-}
-
-impl<'a> Entity<'a>{
-    fn animate(&mut self) -> bool{
-        let pos = &mut self.pos;
-        for i in 0..2 {
-            pos[i] = pos[i] + self.velo[i];
-        }
-        if self.health <= 0 || pos[0] < 0. || (WIDTH as f64) < pos[0] || pos[1] < 0. || (HEIGHT as f64) < pos[1] {
-            false
-        }
-        else{
-            true
-        }
-    }
-
-    fn draw_tex(&self, context: &Context, g: &mut G2d){
-        let pos = &self.pos;
-        let tex2 = self.texture;
-        let mut centerize = vecmath::mat2x3_id();
-        centerize[0][2] = -(tex2.get_width() as f64 / 2.);
-        centerize[1][2] = -(tex2.get_height() as f64 / 2.);
-        let mut mytran = vecmath::mat2x3_id();
-        mytran[0][2] = pos[0];
-        mytran[1][2] = pos[1];
-        let draw_state = if let Some(blend_mode) = self.blend { context.draw_state.blend(blend_mode) } else { context.draw_state };
-        let image   = Image::new().rect([0., 0., tex2.get_width() as f64, tex2.get_height() as f64]);
-        image.draw(tex2, &draw_state, (Matrix(context.transform) * Matrix(mytran) * Matrix(centerize)).0, g);
-    }
-}
 
 type Enemy<'a> = Entity<'a>;
 
@@ -173,7 +124,7 @@ fn main() {
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
-    let mut player = Enemy{pos: [240., 400.], velo: [0., 0.], health: 1, blend: None, texture: &player_tex};
+    let mut player = Enemy::new([240., 400.], [0., 0.], &player_tex);
 
     let mut enemies = Vec::<Enemy>::new();
 
@@ -233,13 +184,11 @@ fn main() {
 
             if key_shoot && time % 3 == 0 {
                 for i in -1..2 {
-                    bullets.push(Bullet(Entity{
-                        pos: player.pos,
-                        velo: [i as f64, -5.],
-                        health: 1,
-                        blend: Some(Blend::Add),
-                        texture: &bullet_tex
-                    }, true))
+                    bullets.push(Bullet(
+                        Entity::new(player.pos, [i as f64, -5.], &bullet_tex)
+                        .blend(Blend::Add)
+                        .rotation((i as f32).atan2(5.)),
+                         true))
                 }
             }
 
@@ -249,13 +198,12 @@ fn main() {
 
             if rng.gen_range(0, 100) < 1 {
                 let boss = rng.gen_range(0, 100) < 20;
-                enemies.push(Enemy{
-                    pos: [rng.gen_range(0., WIDTH as f64), rng.gen_range(0., HEIGHT as f64)],
-                    velo: [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
-                    health: if boss { 64 } else { 3 },
-                    blend: None,
-                    texture: if boss { &boss_tex } else { &enemy_tex }
-                })
+                enemies.push(Enemy::new(
+                    [rng.gen_range(0., WIDTH as f64), rng.gen_range(0., HEIGHT as f64)],
+                    [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
+                    if boss { &boss_tex } else { &enemy_tex })
+                    .health(if boss { 64 } else { 3 })
+                )
             }
 
             let mut to_delete: Vec<usize> = Vec::new();
@@ -268,13 +216,11 @@ fn main() {
 
                 let x: i32 = rng.gen_range(0, if e.texture == &boss_tex { 16 } else { 64 });
                 if x == 0 {
-                    bullets.push(Bullet(Entity{
-                        pos: e.pos,
-                        velo: [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
-                        health: 1,
-                        blend: None,
-                        texture: &ebullet_tex
-                    }, false))
+                    bullets.push(Bullet(Entity::new(
+                        e.pos,
+                        [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
+                        &ebullet_tex)
+                    , false))
                 }
             }
 
@@ -288,13 +234,10 @@ fn main() {
             for (i,b) in &mut bullets.iter_mut().enumerate() {
                 if !b.animate_bullet(&mut enemies){
                     to_delete.push(i);
-                    tent.push(Entity{
-                        pos: b.0.pos,
-                        velo: [0., 0.],
-                        health: (MAX_FRAMES * PLAYBACK_RATE) as i32,
-                        blend: None,
-                        texture: &explode_tex
-                    })
+                    tent.push(
+                        Entity::new(b.0.pos, [0., 0.], &explode_tex)
+                        .health((MAX_FRAMES * PLAYBACK_RATE) as i32)
+                    )
                 }
                 b.0.draw_tex(&context, graphics);
             }
