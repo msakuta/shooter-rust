@@ -8,11 +8,13 @@ extern crate rand;
 use piston_window::*;
 use rand::prelude::*;
 use std::ops::{Add, Mul};
+use piston_window::draw_state::Blend;
 
 struct Entity<'a>{
     pos: [f64; 2],
     velo: [f64; 2],
     health: i32,
+    blend: Option<Blend>,
     texture: &'a G2dTexture
 }
 
@@ -60,7 +62,9 @@ impl<'a> Entity<'a>{
         let mut mytran = vecmath::mat2x3_id();
         mytran[0][2] = pos[0];
         mytran[1][2] = pos[1];
-        image(tex2, (Matrix(context.transform) * Matrix(mytran) * Matrix(centerize)).0, g);
+        let draw_state = if let Some(blend_mode) = self.blend { context.draw_state.blend(blend_mode) } else { context.draw_state };
+        let image   = Image::new().rect([0., 0., tex2.get_width() as f64, tex2.get_height() as f64]);
+        image.draw(tex2, &draw_state, (Matrix(context.transform) * Matrix(mytran) * Matrix(centerize)).0, g);
     }
 }
 
@@ -90,6 +94,9 @@ impl<'a> Bullet<'a>{
 
 type TempEntity<'a> = Entity<'a>;
 
+const MAX_FRAMES: u32 = 8;
+const PLAYBACK_RATE: u32 = 3;
+
 impl<'a> TempEntity<'a>{
     fn animate_temp(&mut self) -> bool{
         self.health -= 1;
@@ -100,22 +107,21 @@ impl<'a> TempEntity<'a>{
         let pos = &self.pos;
         let tex2 = self.texture;
         let mut centerize = vecmath::mat2x3_id();
-        centerize[0][2] = -(tex2.get_width() as f64 / 2.);
+        centerize[0][2] = -(16. / 2.);
         centerize[1][2] = -(tex2.get_height() as f64 / 2.);
         let mut mytran = vecmath::mat2x3_id();
         mytran[0][2] = pos[0];
         mytran[1][2] = pos[1];
-        let frame = (self.health / 2) as u32;
-        let clipped = context.draw_state.scissor([frame * 16, 16, frame * 16 + 16, 16]);
-        //g.rectangle(r: &Rectangle, rectangle: R, draw_state: &DrawState, transform: Matrix2d)
-        Image::new().draw(tex2, &context.draw_state, (Matrix(context.transform) * Matrix(mytran) * Matrix(centerize)).0, g);
+        let frame = MAX_FRAMES - (self.health as u32 / PLAYBACK_RATE) as u32;
+        let draw_state = if let Some(blend_mode) = self.blend { context.draw_state.blend(blend_mode) } else { context.draw_state };
+        let image   = Image::new().rect([0f64, 0f64, 16., tex2.get_height() as f64])
+            .src_rect([frame as f64 * 16., 0., 16., tex2.get_height() as f64]);
+        image.draw(tex2, &draw_state, (Matrix(context.transform) * Matrix(mytran) * Matrix(centerize)).0, g);
     }
 }
 
 fn main() {
     use rand::Rng;
-    //use glutin_window::GlutinWindow;
-    //let (WIDTH, HEIGHT) = (640, 480);
     let mut time = 0;
     let opengl = OpenGL::V3_2;
     let mut window: PistonWindow =
@@ -163,11 +169,11 @@ fn main() {
         ).unwrap();
     let explode_tex = Texture::from_path(
             &mut window.factory,
-            &assets.join("explode.bmp"),
+            &assets.join("explode.png"),
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
-    let mut player = Enemy{pos: [240., 400.], velo: [0., 0.], health: 1, texture: &player_tex};
+    let mut player = Enemy{pos: [240., 400.], velo: [0., 0.], health: 1, blend: None, texture: &player_tex};
 
     let mut enemies = Vec::<Enemy>::new();
 
@@ -231,6 +237,7 @@ fn main() {
                         pos: player.pos,
                         velo: [i as f64, -5.],
                         health: 1,
+                        blend: Some(Blend::Add),
                         texture: &bullet_tex
                     }, true))
                 }
@@ -246,6 +253,7 @@ fn main() {
                     pos: [rng.gen_range(0., WIDTH as f64), rng.gen_range(0., HEIGHT as f64)],
                     velo: [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
                     health: if boss { 64 } else { 3 },
+                    blend: None,
                     texture: if boss { &boss_tex } else { &enemy_tex }
                 })
             }
@@ -264,6 +272,7 @@ fn main() {
                         pos: e.pos,
                         velo: [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
                         health: 1,
+                        blend: None,
                         texture: &ebullet_tex
                     }, false))
                 }
@@ -282,7 +291,8 @@ fn main() {
                     tent.push(Entity{
                         pos: b.0.pos,
                         velo: [0., 0.],
-                        health: 16,
+                        health: (MAX_FRAMES * PLAYBACK_RATE) as i32,
+                        blend: None,
                         texture: &explode_tex
                     })
                 }
