@@ -13,7 +13,7 @@ mod consts;
 mod entity;
 
 use consts::*;
-use crate::entity::{Entity, TempEntity, MAX_FRAMES, PLAYBACK_RATE};
+use crate::entity::{Entity, TempEntity, MAX_FRAMES, MAX_FRAMES2, PLAYBACK_RATE};
 
 const PLAYER_SPEED: f64 = 2.;
 const PLAYER_SIZE: f64 = 16.;
@@ -90,9 +90,21 @@ fn main() {
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
+    let missile_tex = Texture::from_path(
+            &mut window.factory,
+            &assets.join("missile.png"),
+            Flip::None,
+            &TextureSettings::new()
+        ).unwrap();
     let explode_tex = Texture::from_path(
             &mut window.factory,
             &assets.join("explode.png"),
+            Flip::None,
+            &TextureSettings::new()
+        ).unwrap();
+    let explode2_tex = Texture::from_path(
+            &mut window.factory,
+            &assets.join("explode2.png"),
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
@@ -120,7 +132,12 @@ fn main() {
         newvp
     }
 
-    let [mut key_up, mut key_down, mut key_left, mut key_right, mut key_shoot] = [false; 5];
+    let [mut key_up, mut key_down, mut key_left, mut key_right, mut key_shoot, mut key_change] = [false; 6];
+    enum Weapon{
+        Bullet,
+        Missile
+    }
+    let mut weapon = Weapon::Bullet;
 
     while let Some(event) = window.next() {
 
@@ -154,13 +171,20 @@ fn main() {
                 player.pos[0] += PLAYER_SPEED;
             }
 
-            if key_shoot && time % 3 == 0 {
+            let shoot_period = if let Weapon::Bullet = weapon { 5 } else { 15 };
+
+            if key_shoot && time % shoot_period == 0 {
                 for i in -1..2 {
-                    bullets.push(Bullet(
-                        Entity::new(player.pos, [i as f64, -5.], &bullet_tex)
-                        .blend(Blend::Add)
-                        .rotation((i as f32).atan2(5.)),
-                         true))
+                    let mut ent = Entity::new(player.pos, [i as f64, -5.], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
+                        .rotation((i as f32).atan2(5.));
+                    if let Weapon::Bullet = weapon {
+                        ent = ent.blend(Blend::Add);
+                    }
+                    else{
+                        ent = ent.health(5);
+                    }
+
+                    bullets.push(Bullet(ent, true))
                 }
             }
 
@@ -206,14 +230,23 @@ fn main() {
             for (i,b) in &mut bullets.iter_mut().enumerate() {
                 if !b.animate_bullet(&mut enemies){
                     to_delete.push(i);
-                    tent.push(
-                        Entity::new([
+
+                    let mut ent = Entity::new([
                             b.0.pos[0] + 4. * (rng.gen::<f64>() - 0.5),
                             b.0.pos[1] + 4. * (rng.gen::<f64>() - 0.5)
-                        ], [0., 0.], &explode_tex)
-                        .health((MAX_FRAMES * PLAYBACK_RATE) as i32)
+                        ], [0., 0.], if let Weapon::Bullet = weapon { &explode_tex } else { &explode2_tex })
                         .rotation(rng.gen::<f32>() * 2. * std::f32::consts::PI)
-                    )
+                        ;
+                    if let Weapon::Bullet = weapon {
+                        ent = ent.health((MAX_FRAMES * PLAYBACK_RATE) as i32);
+                    }
+                    else{
+                        ent = ent.health((MAX_FRAMES2 * PLAYBACK_RATE) as i32);
+                    }
+
+                    tent.push(TempEntity{base: ent,
+                        max_frames: if let Weapon::Bullet = weapon { MAX_FRAMES } else { MAX_FRAMES2 },
+                        width: if let Weapon::Bullet = weapon { 16 } else { 32 }})
                 }
                 b.0.draw_tex(&context, graphics);
             }
@@ -235,7 +268,7 @@ fn main() {
 
             for i in to_delete.iter().rev() {
                 tent.remove(*i);
-                println!("Deleted tent {} / {}", *i, bullets.len());
+                //println!("Deleted tent {} / {}", *i, bullets.len());
             }
 
             //print!("time: {}, tran: {:?}\n", time, tran);
@@ -254,6 +287,13 @@ fn main() {
                         Key::Left | Key::A => key_left = tf,
                         Key::Right | Key::D => key_right = tf,
                         Key::C => key_shoot = tf,
+                        Key::Z => {
+                            if !key_change && tf {
+                                weapon = if let Weapon::Bullet = weapon { Weapon::Missile } else { Weapon::Bullet };
+                                println!("Weapon switched: {}", if let Weapon::Bullet = weapon { "Bullet" } else { "Missile" });
+                            }
+                            key_change = tf;
+                        },
                         _ => {}
                     }
                 }

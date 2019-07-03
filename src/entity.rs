@@ -82,27 +82,36 @@ impl<'a> Entity<'a>{
     }
 }
 
-pub type TempEntity<'a> = Entity<'a>;
+pub struct TempEntity<'a>{
+    pub base: Entity<'a>,
+    pub max_frames: u32,
+    pub width: u32
+}
 
 pub const MAX_FRAMES: u32 = 8;
+pub const MAX_FRAMES2: u32 = 4;
 pub const PLAYBACK_RATE: u32 = 3;
 
 impl<'a> TempEntity<'a>{
+    pub fn max_frames(mut self, max_frames: u32) -> Self{
+        self.max_frames = max_frames;
+        self
+    }
     pub fn animate_temp(&mut self) -> bool{
-        self.health -= 1;
-        self.animate()
+        self.base.health -= 1;
+        self.base.animate()
     }
 
     pub fn draw_temp(&self, context: &Context, g: &mut G2d){
-        let pos = &self.pos;
-        let tex2 = self.texture;
+        let pos = &self.base.pos;
+        let tex2 = self.base.texture;
         let centerize = translate([-(16. / 2.), -(tex2.get_height() as f64 / 2.)]);
-        let rotmat = rotate_radians(self.rotation as f64);
+        let rotmat = rotate_radians(self.base.rotation as f64);
         let translate = translate(*pos);
-        let frame = MAX_FRAMES - (self.health as u32 / PLAYBACK_RATE) as u32;
-        let draw_state = if let Some(blend_mode) = self.blend { context.draw_state.blend(blend_mode) } else { context.draw_state };
-        let image   = Image::new().rect([0f64, 0f64, 16., tex2.get_height() as f64])
-            .src_rect([frame as f64 * 16., 0., 16., tex2.get_height() as f64]);
+        let frame = self.max_frames - (self.base.health as u32 / PLAYBACK_RATE) as u32;
+        let draw_state = if let Some(blend_mode) = self.base.blend { context.draw_state.blend(blend_mode) } else { context.draw_state };
+        let image   = Image::new().rect([0f64, 0f64, self.width as f64, tex2.get_height() as f64])
+            .src_rect([frame as f64 * self.width as f64, 0., self.width as f64, tex2.get_height() as f64]);
         image.draw(tex2, &draw_state, (Matrix(context.transform) * Matrix(translate) * Matrix(rotmat) * Matrix(centerize)).0, g);
     }
 }
