@@ -133,37 +133,37 @@ fn main() {
 
     let bg = Texture::from_path(
             &mut window.factory,
-            &assets.join("bg.bmp"),
+            &assets.join("bg.png"),
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
     let player_tex = Texture::from_path(
             &mut window.factory,
-            &assets.join("player.bmp"),
+            &assets.join("player.png"),
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
     let boss_tex = Texture::from_path(
             &mut window.factory,
-            &assets.join("boss.bmp"),
+            &assets.join("boss.png"),
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
     let enemy_tex = Texture::from_path(
             &mut window.factory,
-            &assets.join("enemy.bmp"),
+            &assets.join("enemy.png"),
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
     let ebullet_tex = Texture::from_path(
             &mut window.factory,
-            &assets.join("ebullet.bmp"),
+            &assets.join("ebullet.png"),
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
     let bullet_tex = Texture::from_path(
             &mut window.factory,
-            &assets.join("bullet.bmp"),
+            &assets.join("bullet.png"),
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
