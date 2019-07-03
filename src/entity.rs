@@ -2,6 +2,7 @@
 use piston_window::*;
 use piston_window::draw_state::Blend;
 use std::ops::{Add, Mul};
+use piston_window::math::{rotate_radians, translate};
 
 use super::consts::WIDTH;
 use super::consts::HEIGHT;
@@ -72,15 +73,37 @@ impl<'a> Entity<'a>{
     pub fn draw_tex(&self, context: &Context, g: &mut G2d){
         let pos = &self.pos;
         let tex2 = self.texture;
-        let mut centerize = vecmath::mat2x3_id();
-        centerize[0][2] = -(tex2.get_width() as f64 / 2.);
-        centerize[1][2] = -(tex2.get_height() as f64 / 2.);
-        let mut mytran = vecmath::mat2x3_id();
-        let rotmat = piston_window::math::rotate_radians(self.rotation as f64);
-        mytran[0][2] = pos[0];
-        mytran[1][2] = pos[1];
+        let centerize = translate([-(tex2.get_width() as f64 / 2.), -(tex2.get_height() as f64 / 2.)]);
+        let rotmat = rotate_radians(self.rotation as f64);
+        let translate = translate(*pos);
         let draw_state = if let Some(blend_mode) = self.blend { context.draw_state.blend(blend_mode) } else { context.draw_state };
         let image   = Image::new().rect([0., 0., tex2.get_width() as f64, tex2.get_height() as f64]);
-        image.draw(tex2, &draw_state, (Matrix(context.transform) * Matrix(mytran) * Matrix(rotmat) * Matrix(centerize)).0, g);
+        image.draw(tex2, &draw_state, (Matrix(context.transform) * Matrix(translate) * Matrix(rotmat) * Matrix(centerize)).0, g);
     }
 }
+
+pub type TempEntity<'a> = Entity<'a>;
+
+pub const MAX_FRAMES: u32 = 8;
+pub const PLAYBACK_RATE: u32 = 3;
+
+impl<'a> TempEntity<'a>{
+    pub fn animate_temp(&mut self) -> bool{
+        self.health -= 1;
+        self.animate()
+    }
+
+    pub fn draw_temp(&self, context: &Context, g: &mut G2d){
+        let pos = &self.pos;
+        let tex2 = self.texture;
+        let centerize = translate([-(16. / 2.), -(tex2.get_height() as f64 / 2.)]);
+        let rotmat = rotate_radians(self.rotation as f64);
+        let translate = translate(*pos);
+        let frame = MAX_FRAMES - (self.health as u32 / PLAYBACK_RATE) as u32;
+        let draw_state = if let Some(blend_mode) = self.blend { context.draw_state.blend(blend_mode) } else { context.draw_state };
+        let image   = Image::new().rect([0f64, 0f64, 16., tex2.get_height() as f64])
+            .src_rect([frame as f64 * 16., 0., 16., tex2.get_height() as f64]);
+        image.draw(tex2, &draw_state, (Matrix(context.transform) * Matrix(translate) * Matrix(rotmat) * Matrix(centerize)).0, g);
+    }
+}
+

@@ -13,7 +13,7 @@ mod consts;
 mod entity;
 
 use consts::*;
-use crate::entity::{Entity, Matrix};
+use crate::entity::{Entity, TempEntity, MAX_FRAMES, PLAYBACK_RATE};
 
 const PLAYER_SPEED: f64 = 2.;
 const PLAYER_SIZE: f64 = 16.;
@@ -40,34 +40,6 @@ impl<'a> Bullet<'a>{
             }
         }
         ent.animate()
-    }
-}
-
-type TempEntity<'a> = Entity<'a>;
-
-const MAX_FRAMES: u32 = 8;
-const PLAYBACK_RATE: u32 = 3;
-
-impl<'a> TempEntity<'a>{
-    fn animate_temp(&mut self) -> bool{
-        self.health -= 1;
-        self.animate()
-    }
-
-    fn draw_temp(&self, context: &Context, g: &mut G2d){
-        let pos = &self.pos;
-        let tex2 = self.texture;
-        let mut centerize = vecmath::mat2x3_id();
-        centerize[0][2] = -(16. / 2.);
-        centerize[1][2] = -(tex2.get_height() as f64 / 2.);
-        let mut mytran = vecmath::mat2x3_id();
-        mytran[0][2] = pos[0];
-        mytran[1][2] = pos[1];
-        let frame = MAX_FRAMES - (self.health as u32 / PLAYBACK_RATE) as u32;
-        let draw_state = if let Some(blend_mode) = self.blend { context.draw_state.blend(blend_mode) } else { context.draw_state };
-        let image   = Image::new().rect([0f64, 0f64, 16., tex2.get_height() as f64])
-            .src_rect([frame as f64 * 16., 0., 16., tex2.get_height() as f64]);
-        image.draw(tex2, &draw_state, (Matrix(context.transform) * Matrix(mytran) * Matrix(centerize)).0, g);
     }
 }
 
@@ -235,8 +207,12 @@ fn main() {
                 if !b.animate_bullet(&mut enemies){
                     to_delete.push(i);
                     tent.push(
-                        Entity::new(b.0.pos, [0., 0.], &explode_tex)
+                        Entity::new([
+                            b.0.pos[0] + 4. * (rng.gen::<f64>() - 0.5),
+                            b.0.pos[1] + 4. * (rng.gen::<f64>() - 0.5)
+                        ], [0., 0.], &explode_tex)
                         .health((MAX_FRAMES * PLAYBACK_RATE) as i32)
+                        .rotation(rng.gen::<f32>() * 2. * std::f32::consts::PI)
                     )
                 }
                 b.0.draw_tex(&context, graphics);
