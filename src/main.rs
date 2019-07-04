@@ -156,7 +156,7 @@ fn main() {
                 player.pos[0] += PLAYER_SPEED;
             }
 
-            let shoot_period = if let Weapon::Bullet = weapon { 5 } else { 15 };
+            let shoot_period = if let Weapon::Bullet = weapon { 5 } else { 25 };
 
             if key_shoot && time % shoot_period == 0 {
                 for i in -1..2 {
