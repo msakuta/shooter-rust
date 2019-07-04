@@ -4,10 +4,10 @@ use piston_window::draw_state::Blend;
 use std::ops::{Add, Mul};
 use piston_window::math::{rotate_radians, translate};
 
-use super::consts::WIDTH;
-use super::consts::HEIGHT;
+use super::consts::*;
 
 pub struct Entity<'a>{
+    pub id: u32,
     pub pos: [f64; 2],
     pub velo: [f64; 2],
     pub health: i32,
@@ -31,8 +31,10 @@ impl<T> Mul for Matrix<T>
 }
 
 impl<'a> Entity<'a>{
-    pub fn new(pos: [f64; 2], velo: [f64; 2], texture: &'a G2dTexture) -> Self{
+    pub fn new(id_gen: &mut u32, pos: [f64; 2], velo: [f64; 2], texture: &'a G2dTexture) -> Self{
+        *id_gen += 1;
         Self{
+            id: *id_gen,
             pos: pos,
             velo: velo,
             health: 1,
@@ -82,6 +84,79 @@ impl<'a> Entity<'a>{
     }
 }
 
+pub type Enemy<'a> = Entity<'a>;
+
+pub struct BulletBase<'a>(pub Entity<'a>, pub bool);
+
+pub enum Projectile<'a>{
+    Bullet(BulletBase<'a>),
+    Missile(BulletBase<'a>, /*id*/ u32)
+}
+
+impl<'a> Projectile<'a>{
+    pub fn get_base<'b>(&'b self) -> &'b BulletBase{
+        match &self {
+            &Projectile::Bullet(base) => base,
+            &Projectile::Missile(base, _) => base
+        }
+    }
+    // pub fn get_base_mut(&'a mut self) -> &'a mut BulletBase{
+    //     match &mut self {
+    //         &mut Projectile::Bullet(base) => &mut base,
+    //         &mut Projectile::Missile(base, _) => &mut base
+    //     }
+    // }
+
+    fn animate_common(mut base: &mut BulletBase, enemies: &mut Vec<Enemy>) -> bool{
+        let &mut BulletBase(ent, team) = &mut base;
+        if *team {
+            for e in enemies.iter_mut() {
+                if ent.pos[0] - BULLET_SIZE < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < ent.pos[0] + BULLET_SIZE &&
+                    ent.pos[1] - BULLET_SIZE < e.pos[1] + ENEMY_SIZE && e.pos[1] - ENEMY_SIZE < ent.pos[1] + BULLET_SIZE {
+                    e.health -= ent.health;
+                    ent.health = 0;
+                    break;
+                }
+            }
+        }
+        ent.animate()
+    }
+
+    pub fn animate_bullet(&mut self, enemies: &mut Vec<Enemy>) -> bool{
+        Self::animate_common(match self {
+            Projectile::Bullet(base) => base,
+            Projectile::Missile(base, target) => {
+                if *target == 0 {
+                    let best = enemies.iter().fold((0, 1e5), |bestpair, e| {
+                        let dist = ((base.0.pos[0] - e.pos[0]) * (base.0.pos[0] - e.pos[0])
+                            + (base.0.pos[1] - e.pos[1]) * (base.0.pos[1] - e.pos[1])).sqrt();
+                        if dist < bestpair.1 {
+                            (e.id, dist)
+                        }
+                        else{
+                            bestpair
+                        }
+                    });
+                    *target = best.0;
+                }
+                else if let Some(target_ent) = enemies.iter().find(|e| e.id == *target) {
+                    let angle = (target_ent.pos[1] - base.0.pos[1]).atan2(target_ent.pos[0] - base.0.pos[0]);
+                    base.0.rotation = (angle + std::f64::consts::FRAC_PI_2) as f32;
+                    let (s, c) = angle.sin_cos();
+                    base.0.velo[0] = MISSILE_SPEED * c;
+                    base.0.velo[1] = MISSILE_SPEED * s;
+                }
+                else{
+                    *target = 0
+                }
+                base
+            }
+        }, enemies)
+    }
+}
+
+
+
 pub struct TempEntity<'a>{
     pub base: Entity<'a>,
     pub max_frames: u32,
@@ -93,6 +168,7 @@ pub const MAX_FRAMES2: u32 = 4;
 pub const PLAYBACK_RATE: u32 = 3;
 
 impl<'a> TempEntity<'a>{
+    #[allow(dead_code)]
     pub fn max_frames(mut self, max_frames: u32) -> Self{
         self.max_frames = max_frames;
         self

@@ -13,35 +13,18 @@ mod consts;
 mod entity;
 
 use consts::*;
-use crate::entity::{Entity, TempEntity, MAX_FRAMES, MAX_FRAMES2, PLAYBACK_RATE};
+use crate::entity::{
+    Entity,
+    Enemy,
+    BulletBase,
+    Projectile,
+    TempEntity,
+    MAX_FRAMES, MAX_FRAMES2, PLAYBACK_RATE};
 
 const PLAYER_SPEED: f64 = 2.;
 const PLAYER_SIZE: f64 = 16.;
 
 
-type Enemy<'a> = Entity<'a>;
-
-struct Bullet<'a>(Entity<'a>, bool);
-
-const ENEMY_SIZE: f64 = 8.;
-const BULLET_SIZE: f64 = 8.;
-
-impl<'a> Bullet<'a>{
-    fn animate_bullet(&mut self, enemies: &mut Vec<Enemy>) -> bool{
-        let ent = &mut self.0;
-        if self.1 {
-            for e in enemies.iter_mut() {
-                if ent.pos[0] - BULLET_SIZE < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < ent.pos[0] + BULLET_SIZE &&
-                    ent.pos[1] - BULLET_SIZE < e.pos[1] + ENEMY_SIZE && e.pos[1] - ENEMY_SIZE < ent.pos[1] + BULLET_SIZE {
-                        e.health -= ent.health;
-                        ent.health = 0;
-                        break;
-                    }
-            }
-        }
-        ent.animate()
-    }
-}
 
 fn main() {
     use rand::Rng;
@@ -108,11 +91,13 @@ fn main() {
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
-    let mut player = Enemy::new([240., 400.], [0., 0.], &player_tex);
+
+    let mut id_gen = 0;
+    let mut player = Enemy::new(&mut id_gen, [240., 400.], [0., 0.], &player_tex);
 
     let mut enemies = Vec::<Enemy>::new();
 
-    let mut bullets = Vec::<Bullet>::new();
+    let mut bullets = Vec::<Projectile>::new();
 
     let mut tent = Vec::<TempEntity>::new();
 
@@ -175,16 +160,17 @@ fn main() {
 
             if key_shoot && time % shoot_period == 0 {
                 for i in -1..2 {
-                    let mut ent = Entity::new(player.pos, [i as f64, -5.], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
-                        .rotation((i as f32).atan2(5.));
+                    let speed = if let Weapon::Bullet = weapon { BULLET_SPEED } else { MISSILE_SPEED };
+                    let mut ent = Entity::new(&mut id_gen, player.pos, [i as f64, -speed], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
+                        .rotation((i as f32).atan2(speed as f32));
                     if let Weapon::Bullet = weapon {
                         ent = ent.blend(Blend::Add);
+                        bullets.push(Projectile::Bullet(BulletBase(ent, true)))
                     }
                     else{
                         ent = ent.health(5);
+                        bullets.push(Projectile::Missile(BulletBase(ent, true), 0))
                     }
-
-                    bullets.push(Bullet(ent, true))
                 }
             }
 
@@ -195,6 +181,7 @@ fn main() {
             if rng.gen_range(0, 100) < 1 {
                 let boss = rng.gen_range(0, 100) < 20;
                 enemies.push(Enemy::new(
+                    &mut id_gen,
                     [rng.gen_range(0., WIDTH as f64), rng.gen_range(0., HEIGHT as f64)],
                     [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
                     if boss { &boss_tex } else { &enemy_tex })
@@ -212,17 +199,18 @@ fn main() {
 
                 let x: i32 = rng.gen_range(0, if e.texture == &boss_tex { 16 } else { 64 });
                 if x == 0 {
-                    bullets.push(Bullet(Entity::new(
+                    bullets.push(Projectile::Bullet(BulletBase(Entity::new(
+                        &mut id_gen,
                         e.pos,
                         [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
                         &ebullet_tex)
-                    , false))
+                    , false)))
                 }
             }
 
             for i in to_delete.iter().rev() {
                 let dead = enemies.remove(*i);
-                println!("Deleted Enemy {} {} / {}", if dead.texture == &boss_tex { "boss" } else {"enemy"}, *i, enemies.len());
+                println!("Deleted Enemy {} id={}: {} / {}", if dead.texture == &boss_tex { "boss" } else {"enemy"}, dead.id, *i, enemies.len());
             }
 
             to_delete.clear();
@@ -231,13 +219,17 @@ fn main() {
                 if !b.animate_bullet(&mut enemies){
                     to_delete.push(i);
 
-                    let mut ent = Entity::new([
-                            b.0.pos[0] + 4. * (rng.gen::<f64>() - 0.5),
-                            b.0.pos[1] + 4. * (rng.gen::<f64>() - 0.5)
-                        ], [0., 0.], if let Weapon::Bullet = weapon { &explode_tex } else { &explode2_tex })
+                    let base = b.get_base();
+
+                    let mut ent = Entity::new(
+                        &mut id_gen,
+                        [
+                            base.0.pos[0] + 4. * (rng.gen::<f64>() - 0.5),
+                            base.0.pos[1] + 4. * (rng.gen::<f64>() - 0.5)
+                        ], [0., 0.], if let Projectile::Bullet(_) = b { &explode_tex } else { &explode2_tex })
                         .rotation(rng.gen::<f32>() * 2. * std::f32::consts::PI)
                         ;
-                    if let Weapon::Bullet = weapon {
+                    if let Projectile::Bullet(_) = b {
                         ent = ent.health((MAX_FRAMES * PLAYBACK_RATE) as i32);
                     }
                     else{
@@ -245,15 +237,16 @@ fn main() {
                     }
 
                     tent.push(TempEntity{base: ent,
-                        max_frames: if let Weapon::Bullet = weapon { MAX_FRAMES } else { MAX_FRAMES2 },
-                        width: if let Weapon::Bullet = weapon { 16 } else { 32 }})
+                        max_frames: if let Projectile::Bullet(_) = b { MAX_FRAMES } else { MAX_FRAMES2 },
+                        width: if let Projectile::Bullet(_) = b { 16 } else { 32 }})
                 }
-                b.0.draw_tex(&context, graphics);
+
+                b.get_base().0.draw_tex(&context, graphics);
             }
 
             for i in to_delete.iter().rev() {
-                bullets.remove(*i);
-                //println!("Deleted bullet {} / {}", *i, bullets.len());
+                let b = bullets.remove(*i);
+                println!("Deleted bullet id={}, {} / {}", b.get_base().0.id, *i, bullets.len());
             }
 
             to_delete.clear();
