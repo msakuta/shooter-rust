@@ -169,7 +169,7 @@ fn main() {
                     }
                     else{
                         ent = ent.health(5);
-                        bullets.push(Projectile::Missile(BulletBase(ent, true), 0))
+                        bullets.push(Projectile::Missile{base: BulletBase(ent, true), target: 0, trail: vec!()})
                     }
                 }
             }
@@ -241,12 +241,12 @@ fn main() {
                         width: if let Projectile::Bullet(_) = b { 16 } else { 32 }})
                 }
 
-                b.get_base().0.draw_tex(&context, graphics);
+                b.draw(&context, graphics);
             }
 
             for i in to_delete.iter().rev() {
                 let b = bullets.remove(*i);
-                println!("Deleted bullet id={}, {} / {}", b.get_base().0.id, *i, bullets.len());
+                println!("Deleted {} id={}, {} / {}", b.get_type(), b.get_base().0.id, *i, bullets.len());
             }
 
             to_delete.clear();

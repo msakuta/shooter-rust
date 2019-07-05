@@ -91,17 +91,18 @@ pub struct BulletBase<'a>(pub Entity<'a>, pub bool);
 
 pub enum Projectile<'a>{
     Bullet(BulletBase<'a>),
-    Missile(BulletBase<'a>, /*id*/ u32)
+    Missile{base: BulletBase<'a>, target: u32, trail: Vec<[f64; 2]>}
 }
 
 const MISSILE_DETECTION_RANGE: f64 = 256.;
 const MISSILE_HOMING_SPEED: f64 = 0.25;
+const MISSILE_TRAIL_LENGTH: usize = 20;
 
 impl<'a> Projectile<'a>{
     pub fn get_base<'b>(&'b self) -> &'b BulletBase{
         match &self {
             &Projectile::Bullet(base) => base,
-            &Projectile::Missile(base, _) => base
+            &Projectile::Missile{base, target: _, trail: _} => base
         }
     }
     // pub fn get_base_mut(&'a mut self) -> &'a mut BulletBase{
@@ -110,6 +111,13 @@ impl<'a> Projectile<'a>{
     //         &mut Projectile::Missile(base, _) => &mut base
     //     }
     // }
+
+    pub fn get_type(&self) -> &str{
+        match &self{
+            &Projectile::Bullet(_) => "Bullet",
+            &Projectile::Missile{base: _, target: _, trail: _} => "Missile"
+        }
+    }
 
     fn animate_common(mut base: &mut BulletBase, enemies: &mut Vec<Enemy>) -> bool{
         let &mut BulletBase(ent, team) = &mut base;
@@ -129,7 +137,7 @@ impl<'a> Projectile<'a>{
     pub fn animate_bullet(&mut self, enemies: &mut Vec<Enemy>) -> bool{
         Self::animate_common(match self {
             Projectile::Bullet(base) => base,
-            Projectile::Missile(base, target) => {
+            Projectile::Missile{base, target, trail} => {
                 if *target == 0 {
                     let best = enemies.iter().fold((0, 1e5), |bestpair, e| {
                         let dist = vec2_len(vec2_sub(base.0.pos, e.pos));
@@ -164,9 +172,28 @@ impl<'a> Projectile<'a>{
                 else{
                     *target = 0
                 }
+                if MISSILE_TRAIL_LENGTH < trail.len() {
+                    trail.remove(0);
+                }
+                trail.push(base.0.pos);
                 base
             }
         }, enemies)
+    }
+
+    pub fn draw(&self, c: &Context, g: &mut G2d){
+        if let Projectile::Missile{base: _, target: _, trail} = self {
+            let mut iter = trail.iter().enumerate();
+            if let Some(mut prev) = iter.next() {
+                for e in iter {
+                    line([0.75, 0.75, 0.75, e.0 as f32 / MISSILE_TRAIL_LENGTH as f32],
+                        e.0 as f64 / MISSILE_TRAIL_LENGTH as f64,
+                        [prev.1[0], prev.1[1], e.1[0], e.1[1]], c.transform, g);
+                    prev = e;
+                }
+            }
+        }
+        self.get_base().0.draw_tex(c, g);
     }
 }
 
