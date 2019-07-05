@@ -7,6 +7,7 @@ use vecmath::*;
 
 use super::consts::*;
 
+/// The base structure of all Entities.  Implements common methods.
 pub struct Entity<'a>{
     pub id: u32,
     pub pos: [f64; 2],
@@ -15,6 +16,11 @@ pub struct Entity<'a>{
     pub rotation: f32,
     pub blend: Option<Blend>,
     pub texture: &'a G2dTexture
+}
+
+pub enum DeathReason{
+    RangeOut,
+    Killed
 }
 
 // We cannot directly define custom operators on external types, so we wrap the matrix
@@ -60,16 +66,21 @@ impl<'a> Entity<'a>{
         self
     }
 
-    pub fn animate(&mut self) -> bool{
+    /// Returns None if the Entity survived this frame.
+    /// Otherwise returns Some(reason) where reason is DeathReason.
+    pub fn animate(&mut self) -> Option<DeathReason>{
         let pos = &mut self.pos;
         for i in 0..2 {
             pos[i] = pos[i] + self.velo[i];
         }
-        if self.health <= 0 || pos[0] < 0. || (WIDTH as f64) < pos[0] || pos[1] < 0. || (HEIGHT as f64) < pos[1] {
-            false
+        if self.health <= 0 {
+            Some(DeathReason::Killed)
+        }
+        else if pos[0] < 0. || (WIDTH as f64) < pos[0] || pos[1] < 0. || (HEIGHT as f64) < pos[1] {
+            Some(DeathReason::RangeOut)
         }
         else{
-            true
+            None
         }
     }
 
@@ -119,7 +130,7 @@ impl<'a> Projectile<'a>{
         }
     }
 
-    fn animate_common(mut base: &mut BulletBase, enemies: &mut Vec<Enemy>) -> bool{
+    fn animate_common(mut base: &mut BulletBase, enemies: &mut Vec<Enemy>) -> Option<DeathReason>{
         let &mut BulletBase(ent, team) = &mut base;
         if *team {
             for e in enemies.iter_mut() {
@@ -134,7 +145,7 @@ impl<'a> Projectile<'a>{
         ent.animate()
     }
 
-    pub fn animate_bullet(&mut self, enemies: &mut Vec<Enemy>) -> bool{
+    pub fn animate_bullet(&mut self, enemies: &mut Vec<Enemy>) -> Option<DeathReason>{
         Self::animate_common(match self {
             Projectile::Bullet(base) => base,
             Projectile::Missile{base, target, trail} => {
@@ -215,7 +226,7 @@ impl<'a> TempEntity<'a>{
         self.max_frames = max_frames;
         self
     }
-    pub fn animate_temp(&mut self) -> bool{
+    pub fn animate_temp(&mut self) -> Option<DeathReason> {
         self.base.health -= 1;
         self.base.animate()
     }

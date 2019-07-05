@@ -14,6 +14,7 @@ mod entity;
 
 use consts::*;
 use crate::entity::{
+    DeathReason,
     Entity,
     Enemy,
     BulletBase,
@@ -201,8 +202,11 @@ fn main() {
 
             let mut to_delete: Vec<usize> = Vec::new();
             for (i, e) in &mut ((&mut enemies).iter_mut().enumerate()) {
-                if !e.animate() {
+                if let Some(death_reason) = e.animate() {
                     to_delete.push(i);
+                    if let DeathReason::Killed = death_reason {
+                        kills += 1;
+                    }
                     continue;
                 }
                 e.draw_tex(&context, graphics);
@@ -221,35 +225,36 @@ fn main() {
             for i in to_delete.iter().rev() {
                 let dead = enemies.remove(*i);
                 println!("Deleted Enemy {} id={}: {} / {}", if dead.texture == &boss_tex { "boss" } else {"enemy"}, dead.id, *i, enemies.len());
-                kills += 1;
             }
 
             to_delete.clear();
 
             for (i,b) in &mut bullets.iter_mut().enumerate() {
-                if !b.animate_bullet(&mut enemies){
+                if let Some(death_reason) = b.animate_bullet(&mut enemies) {
                     to_delete.push(i);
 
                     let base = b.get_base();
 
-                    let mut ent = Entity::new(
-                        &mut id_gen,
-                        [
-                            base.0.pos[0] + 4. * (rng.gen::<f64>() - 0.5),
-                            base.0.pos[1] + 4. * (rng.gen::<f64>() - 0.5)
-                        ], [0., 0.], if let Projectile::Bullet(_) = b { &explode_tex } else { &explode2_tex })
-                        .rotation(rng.gen::<f32>() * 2. * std::f32::consts::PI)
-                        ;
-                    if let Projectile::Bullet(_) = b {
-                        ent = ent.health((MAX_FRAMES * PLAYBACK_RATE) as i32);
-                    }
-                    else{
-                        ent = ent.health((MAX_FRAMES2 * PLAYBACK_RATE) as i32);
-                    }
+                    if let DeathReason::Killed = death_reason {
+                        let mut ent = Entity::new(
+                            &mut id_gen,
+                            [
+                                base.0.pos[0] + 4. * (rng.gen::<f64>() - 0.5),
+                                base.0.pos[1] + 4. * (rng.gen::<f64>() - 0.5)
+                            ], [0., 0.], if let Projectile::Bullet(_) = b { &explode_tex } else { &explode2_tex })
+                            .rotation(rng.gen::<f32>() * 2. * std::f32::consts::PI)
+                            ;
+                        if let Projectile::Bullet(_) = b {
+                            ent = ent.health((MAX_FRAMES * PLAYBACK_RATE) as i32);
+                        }
+                        else{
+                            ent = ent.health((MAX_FRAMES2 * PLAYBACK_RATE) as i32);
+                        }
 
-                    tent.push(TempEntity{base: ent,
-                        max_frames: if let Projectile::Bullet(_) = b { MAX_FRAMES } else { MAX_FRAMES2 },
-                        width: if let Projectile::Bullet(_) = b { 16 } else { 32 }})
+                        tent.push(TempEntity{base: ent,
+                            max_frames: if let Projectile::Bullet(_) = b { MAX_FRAMES } else { MAX_FRAMES2 },
+                            width: if let Projectile::Bullet(_) = b { 16 } else { 32 }})
+                    }
                 }
 
                 b.draw(&context, graphics);
@@ -263,7 +268,7 @@ fn main() {
             to_delete.clear();
 
             for (i, e) in &mut ((&mut tent).iter_mut().enumerate()) {
-                if !e.animate_temp() {
+                if let Some(_) = e.animate_temp() {
                     to_delete.push(i);
                     continue;
                 }
@@ -294,9 +299,6 @@ fn main() {
             draw_text(&format!("Kills: {}", kills), 1);
             draw_text(&format!("shots_bullet: {}", shots_bullet), 2);
             draw_text(&format!("shots_missile: {}", shots_missile), 3);
-
-            //print!("time: {}, tran: {:?}\n", time, tran);
-            //scene.draw(context.transform, graphics);
         });
         }
         // else if let Some(pos) = event.mouse_cursor_args() {
