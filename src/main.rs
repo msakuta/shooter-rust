@@ -103,6 +103,14 @@ fn main() {
 
     let mut rng = thread_rng();
 
+    let mut kills = 0;
+    let [mut shots_bullet, mut shots_missile] = [0, 0];
+
+    let ref font = assets.join("FiraSans-Regular.ttf");
+    let factory = window.factory.clone();
+    let mut glyphs = Glyphs::new(font, factory, TextureSettings::new()).unwrap();
+
+
     fn limit_viewport(viewport: &Viewport, ratio: f64, wwidth: u32, wheight: u32) -> Viewport{
         let vp_ratio = (viewport.rect[2] - viewport.rect[0]) as f64 /
             (viewport.rect[3] - viewport.rect[0]) as f64;
@@ -164,10 +172,12 @@ fn main() {
                     let mut ent = Entity::new(&mut id_gen, player.pos, [i as f64, -speed], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
                         .rotation((i as f32).atan2(speed as f32));
                     if let Weapon::Bullet = weapon {
+                        shots_bullet += 1;
                         ent = ent.blend(Blend::Add);
                         bullets.push(Projectile::Bullet(BulletBase(ent, true)))
                     }
                     else{
+                        shots_missile += 1;
                         ent = ent.health(5);
                         bullets.push(Projectile::Missile{base: BulletBase(ent, true), target: 0, trail: vec!()})
                     }
@@ -176,7 +186,7 @@ fn main() {
 
             player.draw_tex(&context, graphics);
 
-            time = (time + 1) % 100;
+            time += 1;
 
             if rng.gen_range(0, 100) < 1 {
                 let boss = rng.gen_range(0, 100) < 20;
@@ -211,6 +221,7 @@ fn main() {
             for i in to_delete.iter().rev() {
                 let dead = enemies.remove(*i);
                 println!("Deleted Enemy {} id={}: {} / {}", if dead.texture == &boss_tex { "boss" } else {"enemy"}, dead.id, *i, enemies.len());
+                kills += 1;
             }
 
             to_delete.clear();
@@ -263,6 +274,26 @@ fn main() {
                 tent.remove(*i);
                 //println!("Deleted tent {} / {}", *i, bullets.len());
             }
+
+            // Right side bar
+            rectangle([0.20, 0.20, 0.4, 1.],
+                [WIDTH as f64, 0., (WINDOW_WIDTH - WIDTH) as f64, WINDOW_HEIGHT as f64],
+                context.transform, graphics);
+
+            let mut draw_text = |s: &str, line: i32| {
+                text::Text::new_color([0.0, 1.0, 0.0, 1.0], 12).draw(
+                    s,
+                    &mut glyphs,
+                    &context.draw_state,
+                    context.transform.trans(WIDTH as f64, (line + 1) as f64 * 12.0),
+                    graphics
+                ).unwrap_or_default();
+            };
+
+            draw_text(&format!("Frame: {}", time), 0);
+            draw_text(&format!("Kills: {}", kills), 1);
+            draw_text(&format!("shots_bullet: {}", shots_bullet), 2);
+            draw_text(&format!("shots_missile: {}", shots_missile), 3);
 
             //print!("time: {}, tran: {:?}\n", time, tran);
             //scene.draw(context.transform, graphics);
