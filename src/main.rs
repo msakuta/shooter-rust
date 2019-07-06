@@ -14,6 +14,7 @@ mod entity;
 
 use consts::*;
 use crate::entity::{
+    Matrix,
     DeathReason,
     Entity,
     Enemy,
@@ -56,6 +57,8 @@ fn main() {
     let missile_tex = load_texture("missile.png");
     let explode_tex = load_texture("explode.png");
     let explode2_tex = load_texture("explode2.png");
+    let weapons_tex = load_texture("weapons.png");
+    let sphere_tex = load_texture("sphere.png");
 
     let mut id_gen = 0;
     let mut player = Enemy::new(&mut id_gen, [240., 400.], [0., 0.], &player_tex);
@@ -91,6 +94,8 @@ fn main() {
     }
 
     let [mut key_up, mut key_down, mut key_left, mut key_right, mut key_shoot, mut key_change] = [false; 6];
+
+    #[derive(PartialEq)]
     enum Weapon{
         Bullet,
         Missile
@@ -263,6 +268,19 @@ fn main() {
             draw_text(&format!("Kills: {}", kills), 1);
             draw_text(&format!("shots_bullet: {}", shots_bullet), 2);
             draw_text(&format!("shots_missile: {}", shots_missile), 3);
+
+            // Display weapon selection
+            use piston_window::math::translate;
+            let weapon_set = [(0, Weapon::Bullet), (3, Weapon::Missile)];
+            let centerize = translate([-((sphere_tex.get_width() * weapon_set.len() as u32) as f64 / 2.), -(sphere_tex.get_height() as f64 / 2.)]);
+            for (i,v) in weapon_set.iter().enumerate() {
+                let sphere_image = if v.1 == weapon { Image::new() } else { Image::new_color([0.5, 0.5, 0.5, 1.]) };
+                let transl = translate([((WINDOW_WIDTH + WIDTH) / 2 + i as u32 * 32) as f64, (WINDOW_HEIGHT * 3 / 4) as f64]);
+                let transform = (Matrix(context.transform) * Matrix(transl) * Matrix(centerize)).0;
+                sphere_image.draw(&sphere_tex, &context.draw_state, transform, graphics);
+                let weapons_image = sphere_image.src_rect([v.0 as f64 * 32., 0., 32., weapons_tex.get_height() as f64]);
+                weapons_image.draw(&weapons_tex, &context.draw_state, transform, graphics);
+            }
         });
         }
         // else if let Some(pos) = event.mouse_cursor_args() {
