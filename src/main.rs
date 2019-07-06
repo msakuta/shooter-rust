@@ -20,8 +20,7 @@ use crate::entity::{
     Enemy,
     BulletBase,
     Projectile,
-    TempEntity,
-    MAX_FRAMES, MAX_FRAMES2, PLAYBACK_RATE};
+    TempEntity};
 
 const PLAYER_SPEED: f64 = 2.;
 const PLAYER_SIZE: f64 = 16.;
@@ -149,16 +148,13 @@ fn main() {
                     ], [0., 0.], if is_bullet { &explode_tex } else { &explode2_tex })
                     .rotation(rng.gen::<f32>() * 2. * std::f32::consts::PI)
                     ;
-                if is_bullet {
-                    ent = ent.health((MAX_FRAMES * PLAYBACK_RATE) as i32);
-                }
-                else{
-                    ent = ent.health((MAX_FRAMES2 * PLAYBACK_RATE) as i32);
-                }
+                let (playback_rate, max_frames) = if is_bullet { (2, 8) } else { (4, 6) };
+                ent = ent.health((max_frames * playback_rate) as i32);
 
                 tent.push(TempEntity{base: ent,
-                    max_frames: if is_bullet { MAX_FRAMES } else { MAX_FRAMES2 },
-                    width: if is_bullet { 16 } else { 32 }})
+                    max_frames,
+                    width: if is_bullet { 16 } else { 32 },
+                    playback_rate})
             };
 
             if Weapon::Bullet == weapon || Weapon::Missile == weapon {

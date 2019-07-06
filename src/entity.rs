@@ -213,12 +213,9 @@ impl<'a> Projectile<'a>{
 pub struct TempEntity<'a>{
     pub base: Entity<'a>,
     pub max_frames: u32,
-    pub width: u32
+    pub width: u32,
+    pub playback_rate: u32
 }
-
-pub const MAX_FRAMES: u32 = 8;
-pub const MAX_FRAMES2: u32 = 4;
-pub const PLAYBACK_RATE: u32 = 3;
 
 impl<'a> TempEntity<'a>{
     #[allow(dead_code)]
@@ -237,7 +234,7 @@ impl<'a> TempEntity<'a>{
         let centerize = translate([-(16. / 2.), -(tex2.get_height() as f64 / 2.)]);
         let rotmat = rotate_radians(self.base.rotation as f64);
         let translate = translate(*pos);
-        let frame = self.max_frames - (self.base.health as u32 / PLAYBACK_RATE) as u32;
+        let frame = self.max_frames - (self.base.health as u32 / self.playback_rate) as u32;
         let draw_state = if let Some(blend_mode) = self.base.blend { context.draw_state.blend(blend_mode) } else { context.draw_state };
         let image   = Image::new().rect([0f64, 0f64, self.width as f64, tex2.get_height() as f64])
             .src_rect([frame as f64 * self.width as f64, 0., self.width as f64, tex2.get_height() as f64]);
