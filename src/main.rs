@@ -95,9 +95,10 @@ fn main() {
 
     let [mut key_up, mut key_down, mut key_left, mut key_right, mut key_shoot, mut key_change] = [false; 6];
 
-    #[derive(PartialEq)]
+    #[derive(PartialEq, Clone)]
     enum Weapon{
         Bullet,
+        Light,
         Missile
     }
     let mut weapon = Weapon::Bullet;
@@ -136,20 +137,65 @@ fn main() {
 
             let shoot_period = if let Weapon::Bullet = weapon { 5 } else { 25 };
 
-            if key_shoot && time % shoot_period == 0 {
-                for i in -1..2 {
-                    let speed = if let Weapon::Bullet = weapon { BULLET_SPEED } else { MISSILE_SPEED };
-                    let mut ent = Entity::new(&mut id_gen, player.pos, [i as f64, -speed], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
-                        .rotation((i as f32).atan2(speed as f32));
-                    if let Weapon::Bullet = weapon {
-                        shots_bullet += 1;
-                        ent = ent.blend(Blend::Add);
-                        bullets.push(Projectile::Bullet(BulletBase(ent, true)))
+            // id_gen and rng must be passed as arguments since they are mutable
+            // borrows and needs to be released for each iteration.
+            // These variables are used in between multiple invocation of this closure.
+            let mut add_tent = |is_bullet, pos: &[f64; 2], id_gen: &mut u32, rng: &mut ThreadRng| {
+                let mut ent = Entity::new(
+                    id_gen,
+                    [
+                        pos[0] + 4. * (rng.gen::<f64>() - 0.5),
+                        pos[1] + 4. * (rng.gen::<f64>() - 0.5)
+                    ], [0., 0.], if is_bullet { &explode_tex } else { &explode2_tex })
+                    .rotation(rng.gen::<f32>() * 2. * std::f32::consts::PI)
+                    ;
+                if is_bullet {
+                    ent = ent.health((MAX_FRAMES * PLAYBACK_RATE) as i32);
+                }
+                else{
+                    ent = ent.health((MAX_FRAMES2 * PLAYBACK_RATE) as i32);
+                }
+
+                tent.push(TempEntity{base: ent,
+                    max_frames: if is_bullet { MAX_FRAMES } else { MAX_FRAMES2 },
+                    width: if is_bullet { 16 } else { 32 }})
+            };
+
+            if Weapon::Bullet == weapon || Weapon::Missile == weapon {
+                if key_shoot && time % shoot_period == 0 {
+                    for i in -1..2 {
+                        let speed = if let Weapon::Bullet = weapon { BULLET_SPEED } else { MISSILE_SPEED };
+                        let mut ent = Entity::new(&mut id_gen, player.pos, [i as f64, -speed], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
+                            .rotation((i as f32).atan2(speed as f32));
+                        if let Weapon::Bullet = weapon {
+                            shots_bullet += 1;
+                            ent = ent.blend(Blend::Add);
+                            bullets.push(Projectile::Bullet(BulletBase(ent, true)))
+                        }
+                        else{
+                            shots_missile += 1;
+                            ent = ent.health(5);
+                            bullets.push(Projectile::Missile{base: BulletBase(ent, true), target: 0, trail: vec!()})
+                        }
                     }
-                    else{
-                        shots_missile += 1;
-                        ent = ent.health(5);
-                        bullets.push(Projectile::Missile{base: BulletBase(ent, true), target: 0, trail: vec!()})
+                }
+            }
+            else if Weapon::Light == weapon && key_shoot {
+                // Apparently Piston doesn't allow vertex colored rectangle, we need to 
+                // draw multiple lines in order to display gradual change in color.
+                for i in -3..4 {
+                    let f = (4. - (i as i32).abs() as f32) / 4.;
+                    line([f / 3., 0.5 + f / 2., 1., f],
+                        1.,
+                        [player.pos[0] + i as f64, player.pos[1],
+                         player.pos[0] + i as f64, 0.],
+                        context.transform, graphics);
+                }
+                for e in &mut (&mut enemies).iter_mut() {
+                    if player.pos[0] - LIGHT_WIDTH < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < player.pos[0] + LIGHT_WIDTH &&
+                        /*player.pos[1] < e.pos[1] + ENEMY_SIZE &&*/ e.pos[1] - ENEMY_SIZE < player.pos[1] {
+                        e.health -= 1;
+                        add_tent(true, &e.pos, &mut id_gen, &mut rng);
                     }
                 }
             }
@@ -205,24 +251,7 @@ fn main() {
                     let base = b.get_base();
 
                     if let DeathReason::Killed = death_reason {
-                        let mut ent = Entity::new(
-                            &mut id_gen,
-                            [
-                                base.0.pos[0] + 4. * (rng.gen::<f64>() - 0.5),
-                                base.0.pos[1] + 4. * (rng.gen::<f64>() - 0.5)
-                            ], [0., 0.], if let Projectile::Bullet(_) = b { &explode_tex } else { &explode2_tex })
-                            .rotation(rng.gen::<f32>() * 2. * std::f32::consts::PI)
-                            ;
-                        if let Projectile::Bullet(_) = b {
-                            ent = ent.health((MAX_FRAMES * PLAYBACK_RATE) as i32);
-                        }
-                        else{
-                            ent = ent.health((MAX_FRAMES2 * PLAYBACK_RATE) as i32);
-                        }
-
-                        tent.push(TempEntity{base: ent,
-                            max_frames: if let Projectile::Bullet(_) = b { MAX_FRAMES } else { MAX_FRAMES2 },
-                            width: if let Projectile::Bullet(_) = b { 16 } else { 32 }})
+                        add_tent(if let Projectile::Bullet(_) = b { true } else { false }, &base.0.pos, &mut id_gen, &mut rng);
                     }
                 }
 
@@ -271,7 +300,7 @@ fn main() {
 
             // Display weapon selection
             use piston_window::math::translate;
-            let weapon_set = [(0, Weapon::Bullet), (3, Weapon::Missile)];
+            let weapon_set = [(0, Weapon::Bullet), (2, Weapon::Light), (3, Weapon::Missile)];
             let centerize = translate([-((sphere_tex.get_width() * weapon_set.len() as u32) as f64 / 2.), -(sphere_tex.get_height() as f64 / 2.)]);
             for (i,v) in weapon_set.iter().enumerate() {
                 let sphere_image = if v.1 == weapon { Image::new() } else { Image::new_color([0.5, 0.5, 0.5, 1.]) };
@@ -295,10 +324,17 @@ fn main() {
                         Key::Left | Key::A => key_left = tf,
                         Key::Right | Key::D => key_right = tf,
                         Key::C => key_shoot = tf,
-                        Key::Z => {
+                        Key::Z | Key::X => {
                             if !key_change && tf {
-                                weapon = if let Weapon::Bullet = weapon { Weapon::Missile } else { Weapon::Bullet };
-                                println!("Weapon switched: {}", if let Weapon::Bullet = weapon { "Bullet" } else { "Missile" });
+                                use Weapon::*;
+                                let weapon_set = [("Bullet", Bullet), ("Light", Light), ("Missile", Missile)];
+                                let (name, next_weapon) = match weapon {
+                                    Bullet => if key == Key::X { &weapon_set[1] } else { &weapon_set[2] },
+                                    Light => if key == Key::X { &weapon_set[2] } else { &weapon_set[0] },
+                                    Missile => if key == Key::X { &weapon_set[0] } else { &weapon_set[1] },
+                                };
+                                weapon = next_weapon.clone();
+                                println!("Weapon switched: {}", name);
                             }
                             key_change = tf;
                         },
