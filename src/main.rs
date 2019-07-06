@@ -17,13 +17,12 @@ use crate::entity::{
     Matrix,
     DeathReason,
     Entity,
+    Player,
     Enemy,
     BulletBase,
     Projectile,
     TempEntity};
 
-const PLAYER_SPEED: f64 = 2.;
-const PLAYER_SIZE: f64 = 16.;
 
 
 
@@ -58,11 +57,15 @@ fn main() {
     let explode2_tex = load_texture("explode2.png");
     let weapons_tex = load_texture("weapons.png");
     let sphere_tex = load_texture("sphere.png");
+    let power_tex = load_texture("power.png");
+    let power2_tex = load_texture("power2.png");
 
     let mut id_gen = 0;
-    let mut player = Enemy::new(&mut id_gen, [240., 400.], [0., 0.], &player_tex);
+    let mut player = Player::new(Enemy::new(&mut id_gen, [240., 400.], [0., 0.], &player_tex));
 
     let mut enemies = Vec::<Enemy>::new();
+
+    let mut items = Vec::<Enemy>::new();
 
     let mut bullets = Vec::<Projectile>::new();
 
@@ -72,7 +75,6 @@ fn main() {
 
     let mut game_over = true;
 
-    let [mut score, mut kills] = [0, 0];
     let [mut shots_bullet, mut shots_missile] = [0, 0];
 
     let ref font = assets.join("FiraSans-Regular.ttf");
@@ -145,26 +147,19 @@ fn main() {
             };
 
             if !game_over {
-                if key_up && PLAYER_SIZE <= player.pos[1] - PLAYER_SPEED {
-                    player.pos[1] -= PLAYER_SPEED;
-                }
-                else if key_down && player.pos[1] + PLAYER_SPEED < HEIGHT as f64 - PLAYER_SIZE {
-                    player.pos[1] += PLAYER_SPEED;
-                }
-                if key_left && PLAYER_SIZE <= player.pos[0] - PLAYER_SPEED {
-                    player.pos[0] -= PLAYER_SPEED;
-                }
-                else if key_right && player.pos[0] + PLAYER_SPEED < WIDTH as f64 - PLAYER_SIZE {
-                    player.pos[0] += PLAYER_SPEED;
-                }
+                if key_up { player.move_up() }
+                if key_down { player.move_down() }
+                if key_left { player.move_left() }
+                if key_right { player.move_right() }
 
                 let shoot_period = if let Weapon::Bullet = weapon { 5 } else { 50 };
 
                 if Weapon::Bullet == weapon || Weapon::Missile == weapon {
                     if key_shoot && time % shoot_period == 0 {
-                        for i in -1..2 {
+                        let level = player.level() as i32;
+                        for i in -1-level..2+level {
                             let speed = if let Weapon::Bullet = weapon { BULLET_SPEED } else { MISSILE_SPEED };
-                            let mut ent = Entity::new(&mut id_gen, player.pos, [i as f64, -speed], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
+                            let mut ent = Entity::new(&mut id_gen, player.base.pos, [i as f64, -speed], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
                                 .rotation((i as f32).atan2(speed as f32));
                             if let Weapon::Bullet = weapon {
                                 shots_bullet += 1;
@@ -186,23 +181,44 @@ fn main() {
                         let f = (4. - (i as i32).abs() as f32) / 4.;
                         line([f / 3., 0.5 + f / 2., 1., f],
                             1.,
-                            [player.pos[0] + i as f64, player.pos[1],
-                            player.pos[0] + i as f64, 0.],
+                            [player.base.pos[0] + i as f64, player.base.pos[1],
+                            player.base.pos[0] + i as f64, 0.],
                             context.transform, graphics);
                     }
                     for e in &mut (&mut enemies).iter_mut() {
-                        if player.pos[0] - LIGHT_WIDTH < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < player.pos[0] + LIGHT_WIDTH &&
-                            e.pos[1] - ENEMY_SIZE < player.pos[1] {
+                        if player.base.pos[0] - LIGHT_WIDTH < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < player.base.pos[0] + LIGHT_WIDTH &&
+                            e.pos[1] - ENEMY_SIZE < player.base.pos[1] {
                             e.health -= 1;
                             add_tent(true, &e.pos, &mut id_gen, &mut rng);
                         }
                     }
                 }
 
-                player.draw_tex(&context, graphics);
+                player.base.draw_tex(&context, graphics);
             }
 
             time += 1;
+
+            let mut to_delete: Vec<usize> = Vec::new();
+
+            for (i, e) in &mut ((&mut items).iter_mut().enumerate()) {
+                if let Some(_) = e.animate() {
+                    to_delete.push(i);
+                    continue;
+                }
+                if let Some(_) = e.hits_player(&player.base) {
+                    to_delete.push(i);
+                    player.power += if e.texture == &power_tex { 1 } else { 10 };
+                    continue;
+                }
+                e.draw_tex(&context, graphics);
+            }
+
+            for i in to_delete.iter().rev() {
+                let dead = items.remove(*i);
+                println!("Deleted Item id={}: {} / {}", dead.id, *i, enemies.len());
+            }
+            to_delete.clear();
 
             if rng.gen_range(0, 100) < 1 {
                 let boss = rng.gen_range(0, 100) < 20;
@@ -215,13 +231,16 @@ fn main() {
                 )
             }
 
-            let mut to_delete: Vec<usize> = Vec::new();
             for (i, e) in &mut ((&mut enemies).iter_mut().enumerate()) {
                 if let Some(death_reason) = e.animate() {
                     to_delete.push(i);
                     if let DeathReason::Killed = death_reason {
-                        kills += 1;
-                        score += if e.texture == &boss_tex { 10 } else { 1 };
+                        player.kills += 1;
+                        player.score += if e.texture == &boss_tex { 10 } else { 1 };
+                        if rng.gen_range(0, 100) < 20 {
+                            items.push(Enemy::new(&mut id_gen, e.pos, [0., 1.],
+                                if e.texture == &boss_tex { &power2_tex } else { &power_tex }));
+                        }
                     }
                     continue;
                 }
@@ -246,7 +265,7 @@ fn main() {
             to_delete.clear();
 
             for (i,b) in &mut bullets.iter_mut().enumerate() {
-                if let Some(death_reason) = b.animate_bullet(&mut enemies, &mut player) {
+                if let Some(death_reason) = b.animate_bullet(&mut enemies, &mut player.base) {
                     to_delete.push(i);
 
                     let base = b.get_base();
@@ -290,6 +309,8 @@ fn main() {
                 [WIDTH as f64, 0., (WINDOW_WIDTH - WIDTH) as f64, WINDOW_HEIGHT as f64],
                 context.transform, graphics);
 
+            rectangle([0., 0.5, 0.4, 1.], [WIDTH as f64, (3) as f64 * 12.0 + 4., player.power as f64, 8.], context.transform, graphics);
+
             let mut draw_text_pos = |s: &str, pos: [f64; 2], color: [f32; 4], size: u32| {
                 text::Text::new_color(color, size).draw(
                     s,
@@ -309,10 +330,11 @@ fn main() {
             let mut draw_text = |s: &str, line: i32| draw_text_pos(s, [WIDTH as f64, (line + 1) as f64 * 12.0], [0.0, 1.0, 0.0, 1.0], 12);
 
             draw_text(&format!("Frame: {}", time), 0);
-            draw_text(&format!("Score: {}", score), 1);
-            draw_text(&format!("Kills: {}", kills), 2);
-            draw_text(&format!("shots_bullet: {}", shots_bullet), 3);
-            draw_text(&format!("shots_missile: {}", shots_missile), 4);
+            draw_text(&format!("Score: {}", player.score), 1);
+            draw_text(&format!("Kills: {}", player.kills), 2);
+            draw_text(&format!("Power: {}, Level: {}", player.power, player.level()), 3);
+            draw_text(&format!("shots_bullet: {}", shots_bullet), 4);
+            draw_text(&format!("shots_missile: {}", shots_missile), 5);
 
             let weapon_set = [(0, Weapon::Bullet, [1.,0.5,0.]), (2, Weapon::Light, [1.,1.,1.]), (3, Weapon::Missile, [0.,1.,0.])];
 
@@ -372,13 +394,13 @@ fn main() {
                             key_change = tf;
                         },
                         Key::Space => if tf {
+                            items.clear();
                             enemies.clear();
                             bullets.clear();
                             tent.clear();
                             time = 0;
                             id_gen = 0;
-                            score = 0;
-                            kills = 0;
+                            player.reset();
                             shots_bullet = 0;
                             shots_missile = 0;
                             game_over = false;

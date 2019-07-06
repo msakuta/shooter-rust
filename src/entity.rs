@@ -95,6 +95,63 @@ impl<'a> Entity<'a>{
         let image   = Image::new().rect([0., 0., tex2.get_width() as f64, tex2.get_height() as f64]);
         image.draw(tex2, &draw_state, (Matrix(context.transform) * Matrix(translate) * Matrix(rotmat) * Matrix(centerize)).0, g);
     }
+
+    pub fn hits_player(&self, player: &Self) -> Option<DeathReason> {
+        let e = &player;
+        if self.pos[0] - BULLET_SIZE < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < self.pos[0] + BULLET_SIZE &&
+            self.pos[1] - BULLET_SIZE < e.pos[1] + ENEMY_SIZE && e.pos[1] - ENEMY_SIZE < self.pos[1] + BULLET_SIZE {
+            Some(DeathReason::HitPlayer)
+        }
+        else{ None }
+    }
+}
+
+pub struct Player<'a>{
+    pub base: Entity<'a>,
+    pub score: u32,
+    pub kills: u32,
+    pub power: u32
+}
+
+impl<'a> Player<'a>{
+    pub fn new(base: Entity<'a>) -> Self{
+        Self{base, score: 0, kills: 0, power: 0}
+    }
+
+    pub fn move_up(&mut self){
+        if PLAYER_SIZE <= self.base.pos[1] - PLAYER_SPEED {
+            self.base.pos[1] -= PLAYER_SPEED;
+        }
+    }
+
+    pub fn move_down(&mut self){
+        if self.base.pos[1] + PLAYER_SPEED < HEIGHT as f64 - PLAYER_SIZE {
+            self.base.pos[1] += PLAYER_SPEED;
+        }
+    }
+
+    pub fn move_left(&mut self){
+        if PLAYER_SIZE <= self.base.pos[0] - PLAYER_SPEED {
+            self.base.pos[0] -= PLAYER_SPEED;
+        }
+    }
+
+    pub fn move_right(&mut self){
+        if self.base.pos[0] + PLAYER_SPEED < WIDTH as f64 - PLAYER_SIZE {
+            self.base.pos[0] += PLAYER_SPEED;
+        }
+    }
+
+    pub fn reset(&mut self){
+        self.base.pos = [240., 400.];
+        self.score = 0;
+        self.kills = 0;
+        self.power = 0;
+    }
+
+    pub fn level(&self) -> u32{
+        self.power >> 4
+    }
 }
 
 pub type Enemy<'a> = Entity<'a>;
@@ -144,11 +201,9 @@ impl<'a> Projectile<'a>{
             }
         }
         else {
-            let e = &mut player;
-            if ent.pos[0] - BULLET_SIZE < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < ent.pos[0] + BULLET_SIZE &&
-                ent.pos[1] - BULLET_SIZE < e.pos[1] + ENEMY_SIZE && e.pos[1] - ENEMY_SIZE < ent.pos[1] + BULLET_SIZE {
-                e.health -= ent.health;
-                return Some(DeathReason::HitPlayer);
+            if let Some(death_reason) = ent.hits_player(player) {
+                player.health -= ent.health;
+                return Some(death_reason)
             }
         }
         ent.animate()
