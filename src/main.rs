@@ -193,7 +193,7 @@ fn main() {
                 }
                 for e in &mut (&mut enemies).iter_mut() {
                     if player.pos[0] - LIGHT_WIDTH < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < player.pos[0] + LIGHT_WIDTH &&
-                        /*player.pos[1] < e.pos[1] + ENEMY_SIZE &&*/ e.pos[1] - ENEMY_SIZE < player.pos[1] {
+                        e.pos[1] - ENEMY_SIZE < player.pos[1] {
                         e.health -= 1;
                         add_tent(true, &e.pos, &mut id_gen, &mut rng);
                     }
@@ -283,33 +283,50 @@ fn main() {
                 [WIDTH as f64, 0., (WINDOW_WIDTH - WIDTH) as f64, WINDOW_HEIGHT as f64],
                 context.transform, graphics);
 
-            let mut draw_text = |s: &str, line: i32| {
+            let mut draw_text_pos = |s: &str, pos: [f64; 2]| {
                 text::Text::new_color([0.0, 1.0, 0.0, 1.0], 12).draw(
                     s,
                     &mut glyphs,
                     &context.draw_state,
-                    context.transform.trans(WIDTH as f64, (line + 1) as f64 * 12.0),
+                    context.transform.trans(pos[0], pos[1]),
                     graphics
                 ).unwrap_or_default();
             };
+
+            let mut draw_text = |s: &str, line: i32| draw_text_pos(s, [WIDTH as f64, (line + 1) as f64 * 12.0]);
 
             draw_text(&format!("Frame: {}", time), 0);
             draw_text(&format!("Kills: {}", kills), 1);
             draw_text(&format!("shots_bullet: {}", shots_bullet), 2);
             draw_text(&format!("shots_missile: {}", shots_missile), 3);
 
+            let weapon_set = [(0, Weapon::Bullet, [1.,0.5,0.]), (2, Weapon::Light, [1.,1.,1.]), (3, Weapon::Missile, [0.,1.,0.])];
+
+            draw_text_pos("Z", [
+                ((WINDOW_WIDTH + WIDTH) / 2 - weapon_set.len() as u32 * 32 / 2 - 16) as f64,
+                (WINDOW_HEIGHT * 3 / 4) as f64]);
+            draw_text_pos("X", [
+                ((WINDOW_WIDTH + WIDTH) / 2 + weapon_set.len() as u32 * 32 / 2 + 16) as f64,
+                (WINDOW_HEIGHT * 3 / 4) as f64]);
+
             // Display weapon selection
             use piston_window::math::translate;
-            let weapon_set = [(0, Weapon::Bullet), (2, Weapon::Light), (3, Weapon::Missile)];
             let centerize = translate([-((sphere_tex.get_width() * weapon_set.len() as u32) as f64 / 2.), -(sphere_tex.get_height() as f64 / 2.)]);
             for (i,v) in weapon_set.iter().enumerate() {
-                let sphere_image = if v.1 == weapon { Image::new() } else { Image::new_color([0.5, 0.5, 0.5, 1.]) };
+                let sphere_image = if v.1 == weapon {
+                    Image::new_color([v.2[0], v.2[1], v.2[2], 1.])
+                }
+                else {
+                    Image::new_color([0.5 * v.2[0], 0.5 * v.2[1], 0.5 * v.2[2], 1.])
+                };
                 let transl = translate([((WINDOW_WIDTH + WIDTH) / 2 + i as u32 * 32) as f64, (WINDOW_HEIGHT * 3 / 4) as f64]);
                 let transform = (Matrix(context.transform) * Matrix(transl) * Matrix(centerize)).0;
                 sphere_image.draw(&sphere_tex, &context.draw_state, transform, graphics);
-                let weapons_image = sphere_image.src_rect([v.0 as f64 * 32., 0., 32., weapons_tex.get_height() as f64]);
+                let weapons_image = sphere_image.color(if v.1 == weapon { [1., 1., 1., 1.] } else { [0.5, 0.5, 0.5, 1.] })
+                .src_rect([v.0 as f64 * 32., 0., 32., weapons_tex.get_height() as f64]);
                 weapons_image.draw(&weapons_tex, &context.draw_state, transform, graphics);
             }
+
         });
         }
         // else if let Some(pos) = event.mouse_cursor_args() {
