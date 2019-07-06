@@ -20,7 +20,8 @@ pub struct Entity<'a>{
 
 pub enum DeathReason{
     RangeOut,
-    Killed
+    Killed,
+    HitPlayer
 }
 
 // We cannot directly define custom operators on external types, so we wrap the matrix
@@ -130,7 +131,7 @@ impl<'a> Projectile<'a>{
         }
     }
 
-    fn animate_common(mut base: &mut BulletBase, enemies: &mut Vec<Enemy>) -> Option<DeathReason>{
+    fn animate_common(mut base: &mut BulletBase, enemies: &mut Vec<Enemy>, mut player: &mut Entity) -> Option<DeathReason>{
         let &mut BulletBase(ent, team) = &mut base;
         if *team {
             for e in enemies.iter_mut() {
@@ -142,10 +143,18 @@ impl<'a> Projectile<'a>{
                 }
             }
         }
+        else {
+            let e = &mut player;
+            if ent.pos[0] - BULLET_SIZE < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < ent.pos[0] + BULLET_SIZE &&
+                ent.pos[1] - BULLET_SIZE < e.pos[1] + ENEMY_SIZE && e.pos[1] - ENEMY_SIZE < ent.pos[1] + BULLET_SIZE {
+                e.health -= ent.health;
+                return Some(DeathReason::HitPlayer);
+            }
+        }
         ent.animate()
     }
 
-    pub fn animate_bullet(&mut self, enemies: &mut Vec<Enemy>) -> Option<DeathReason>{
+    pub fn animate_bullet(&mut self, enemies: &mut Vec<Enemy>, player: &mut Entity) -> Option<DeathReason>{
         Self::animate_common(match self {
             Projectile::Bullet(base) => base,
             Projectile::Missile{base, target, trail} => {
@@ -189,7 +198,7 @@ impl<'a> Projectile<'a>{
                 trail.push(base.0.pos);
                 base
             }
-        }, enemies)
+        }, enemies, player)
     }
 
     pub fn draw(&self, c: &Context, g: &mut G2d){

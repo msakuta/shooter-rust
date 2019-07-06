@@ -70,7 +70,9 @@ fn main() {
 
     let mut rng = thread_rng();
 
-    let mut kills = 0;
+    let mut game_over = true;
+
+    let [mut score, mut kills] = [0, 0];
     let [mut shots_bullet, mut shots_missile] = [0, 0];
 
     let ref font = assets.join("FiraSans-Regular.ttf");
@@ -121,21 +123,6 @@ fn main() {
                 context = Context::new_viewport(limit_viewport(&viewport, ratio, WINDOW_WIDTH, WINDOW_HEIGHT));
             }
 
-            if key_up && PLAYER_SIZE <= player.pos[1] - PLAYER_SPEED {
-                player.pos[1] -= PLAYER_SPEED;
-            }
-            else if key_down && player.pos[1] + PLAYER_SPEED < HEIGHT as f64 - PLAYER_SIZE {
-                player.pos[1] += PLAYER_SPEED;
-            }
-            if key_left && PLAYER_SIZE <= player.pos[0] - PLAYER_SPEED {
-                player.pos[0] -= PLAYER_SPEED;
-            }
-            else if key_right && player.pos[0] + PLAYER_SPEED < WIDTH as f64 - PLAYER_SIZE {
-                player.pos[0] += PLAYER_SPEED;
-            }
-
-            let shoot_period = if let Weapon::Bullet = weapon { 5 } else { 25 };
-
             // id_gen and rng must be passed as arguments since they are mutable
             // borrows and needs to be released for each iteration.
             // These variables are used in between multiple invocation of this closure.
@@ -157,46 +144,63 @@ fn main() {
                     playback_rate})
             };
 
-            if Weapon::Bullet == weapon || Weapon::Missile == weapon {
-                if key_shoot && time % shoot_period == 0 {
-                    for i in -1..2 {
-                        let speed = if let Weapon::Bullet = weapon { BULLET_SPEED } else { MISSILE_SPEED };
-                        let mut ent = Entity::new(&mut id_gen, player.pos, [i as f64, -speed], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
-                            .rotation((i as f32).atan2(speed as f32));
-                        if let Weapon::Bullet = weapon {
-                            shots_bullet += 1;
-                            ent = ent.blend(Blend::Add);
-                            bullets.push(Projectile::Bullet(BulletBase(ent, true)))
-                        }
-                        else{
-                            shots_missile += 1;
-                            ent = ent.health(5);
-                            bullets.push(Projectile::Missile{base: BulletBase(ent, true), target: 0, trail: vec!()})
-                        }
-                    }
+            if !game_over {
+                if key_up && PLAYER_SIZE <= player.pos[1] - PLAYER_SPEED {
+                    player.pos[1] -= PLAYER_SPEED;
                 }
-            }
-            else if Weapon::Light == weapon && key_shoot {
-                // Apparently Piston doesn't allow vertex colored rectangle, we need to 
-                // draw multiple lines in order to display gradual change in color.
-                for i in -3..4 {
-                    let f = (4. - (i as i32).abs() as f32) / 4.;
-                    line([f / 3., 0.5 + f / 2., 1., f],
-                        1.,
-                        [player.pos[0] + i as f64, player.pos[1],
-                         player.pos[0] + i as f64, 0.],
-                        context.transform, graphics);
+                else if key_down && player.pos[1] + PLAYER_SPEED < HEIGHT as f64 - PLAYER_SIZE {
+                    player.pos[1] += PLAYER_SPEED;
                 }
-                for e in &mut (&mut enemies).iter_mut() {
-                    if player.pos[0] - LIGHT_WIDTH < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < player.pos[0] + LIGHT_WIDTH &&
-                        e.pos[1] - ENEMY_SIZE < player.pos[1] {
-                        e.health -= 1;
-                        add_tent(true, &e.pos, &mut id_gen, &mut rng);
-                    }
+                if key_left && PLAYER_SIZE <= player.pos[0] - PLAYER_SPEED {
+                    player.pos[0] -= PLAYER_SPEED;
                 }
-            }
+                else if key_right && player.pos[0] + PLAYER_SPEED < WIDTH as f64 - PLAYER_SIZE {
+                    player.pos[0] += PLAYER_SPEED;
+                }
 
-            player.draw_tex(&context, graphics);
+                let shoot_period = if let Weapon::Bullet = weapon { 5 } else { 50 };
+
+                if Weapon::Bullet == weapon || Weapon::Missile == weapon {
+                    if key_shoot && time % shoot_period == 0 {
+                        for i in -1..2 {
+                            let speed = if let Weapon::Bullet = weapon { BULLET_SPEED } else { MISSILE_SPEED };
+                            let mut ent = Entity::new(&mut id_gen, player.pos, [i as f64, -speed], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
+                                .rotation((i as f32).atan2(speed as f32));
+                            if let Weapon::Bullet = weapon {
+                                shots_bullet += 1;
+                                ent = ent.blend(Blend::Add);
+                                bullets.push(Projectile::Bullet(BulletBase(ent, true)))
+                            }
+                            else{
+                                shots_missile += 1;
+                                ent = ent.health(5);
+                                bullets.push(Projectile::Missile{base: BulletBase(ent, true), target: 0, trail: vec!()})
+                            }
+                        }
+                    }
+                }
+                else if Weapon::Light == weapon && key_shoot {
+                    // Apparently Piston doesn't allow vertex colored rectangle, we need to 
+                    // draw multiple lines in order to display gradual change in color.
+                    for i in -3..4 {
+                        let f = (4. - (i as i32).abs() as f32) / 4.;
+                        line([f / 3., 0.5 + f / 2., 1., f],
+                            1.,
+                            [player.pos[0] + i as f64, player.pos[1],
+                            player.pos[0] + i as f64, 0.],
+                            context.transform, graphics);
+                    }
+                    for e in &mut (&mut enemies).iter_mut() {
+                        if player.pos[0] - LIGHT_WIDTH < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < player.pos[0] + LIGHT_WIDTH &&
+                            e.pos[1] - ENEMY_SIZE < player.pos[1] {
+                            e.health -= 1;
+                            add_tent(true, &e.pos, &mut id_gen, &mut rng);
+                        }
+                    }
+                }
+
+                player.draw_tex(&context, graphics);
+            }
 
             time += 1;
 
@@ -217,6 +221,7 @@ fn main() {
                     to_delete.push(i);
                     if let DeathReason::Killed = death_reason {
                         kills += 1;
+                        score += if e.texture == &boss_tex { 10 } else { 1 };
                     }
                     continue;
                 }
@@ -241,13 +246,19 @@ fn main() {
             to_delete.clear();
 
             for (i,b) in &mut bullets.iter_mut().enumerate() {
-                if let Some(death_reason) = b.animate_bullet(&mut enemies) {
+                if let Some(death_reason) = b.animate_bullet(&mut enemies, &mut player) {
                     to_delete.push(i);
 
                     let base = b.get_base();
 
-                    if let DeathReason::Killed = death_reason {
-                        add_tent(if let Projectile::Bullet(_) = b { true } else { false }, &base.0.pos, &mut id_gen, &mut rng);
+                    match death_reason {
+                        DeathReason::Killed | DeathReason::HitPlayer =>
+                            add_tent(if let Projectile::Bullet(_) = b { true } else { false }, &base.0.pos, &mut id_gen, &mut rng),
+                        _ => {}
+                    }
+
+                    if let DeathReason::HitPlayer = death_reason {
+                        game_over = true;
                     }
                 }
 
@@ -279,8 +290,8 @@ fn main() {
                 [WIDTH as f64, 0., (WINDOW_WIDTH - WIDTH) as f64, WINDOW_HEIGHT as f64],
                 context.transform, graphics);
 
-            let mut draw_text_pos = |s: &str, pos: [f64; 2]| {
-                text::Text::new_color([0.0, 1.0, 0.0, 1.0], 12).draw(
+            let mut draw_text_pos = |s: &str, pos: [f64; 2], color: [f32; 4], size: u32| {
+                text::Text::new_color(color, size).draw(
                     s,
                     &mut glyphs,
                     &context.draw_state,
@@ -289,21 +300,30 @@ fn main() {
                 ).unwrap_or_default();
             };
 
-            let mut draw_text = |s: &str, line: i32| draw_text_pos(s, [WIDTH as f64, (line + 1) as f64 * 12.0]);
+            if game_over {
+                let color = [1.0, 1.0, 1.0, 1.0];
+                draw_text_pos("GAME OVER", [(WIDTH / 2 - 80) as f64, (HEIGHT * 3 / 4) as f64], color, 20);
+                draw_text_pos("Press Space to Start", [(WIDTH / 2 - 110) as f64, (HEIGHT * 3 / 4 + 20) as f64], color, 20);
+            }
+
+            let mut draw_text = |s: &str, line: i32| draw_text_pos(s, [WIDTH as f64, (line + 1) as f64 * 12.0], [0.0, 1.0, 0.0, 1.0], 12);
 
             draw_text(&format!("Frame: {}", time), 0);
-            draw_text(&format!("Kills: {}", kills), 1);
-            draw_text(&format!("shots_bullet: {}", shots_bullet), 2);
-            draw_text(&format!("shots_missile: {}", shots_missile), 3);
+            draw_text(&format!("Score: {}", score), 1);
+            draw_text(&format!("Kills: {}", kills), 2);
+            draw_text(&format!("shots_bullet: {}", shots_bullet), 3);
+            draw_text(&format!("shots_missile: {}", shots_missile), 4);
 
             let weapon_set = [(0, Weapon::Bullet, [1.,0.5,0.]), (2, Weapon::Light, [1.,1.,1.]), (3, Weapon::Missile, [0.,1.,0.])];
 
             draw_text_pos("Z", [
                 ((WINDOW_WIDTH + WIDTH) / 2 - weapon_set.len() as u32 * 32 / 2 - 16) as f64,
-                (WINDOW_HEIGHT * 3 / 4) as f64]);
+                (WINDOW_HEIGHT * 3 / 4) as f64],
+                [1.0, 1.0, 0.0, 1.0], 14);
             draw_text_pos("X", [
                 ((WINDOW_WIDTH + WIDTH) / 2 + weapon_set.len() as u32 * 32 / 2 + 16) as f64,
-                (WINDOW_HEIGHT * 3 / 4) as f64]);
+                (WINDOW_HEIGHT * 3 / 4) as f64],
+                [1.0, 1.0, 0.0, 1.0], 14);
 
             // Display weapon selection
             use piston_window::math::translate;
@@ -338,7 +358,7 @@ fn main() {
                         Key::Right | Key::D => key_right = tf,
                         Key::C => key_shoot = tf,
                         Key::Z | Key::X => {
-                            if !key_change && tf {
+                            if !key_change && tf && !game_over {
                                 use Weapon::*;
                                 let weapon_set = [("Bullet", Bullet), ("Light", Light), ("Missile", Missile)];
                                 let (name, next_weapon) = match weapon {
@@ -351,6 +371,18 @@ fn main() {
                             }
                             key_change = tf;
                         },
+                        Key::Space => if tf {
+                            enemies.clear();
+                            bullets.clear();
+                            tent.clear();
+                            time = 0;
+                            id_gen = 0;
+                            score = 0;
+                            kills = 0;
+                            shots_bullet = 0;
+                            shots_missile = 0;
+                            game_over = false;
+                        }
                         _ => {}
                     }
                 }
