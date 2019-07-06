@@ -38,60 +38,24 @@ fn main() {
     let assets = find_folder::Search::ParentsThenKids(3, 3)
         .for_folder("assets").unwrap();
 
-    let bg = Texture::from_path(
+    let mut load_texture = |name| {
+        Texture::from_path(
             &mut window.factory,
-            &assets.join("bg.png"),
+            &assets.join(name),
             Flip::None,
             &TextureSettings::new()
-        ).unwrap();
-    let player_tex = Texture::from_path(
-            &mut window.factory,
-            &assets.join("player.png"),
-            Flip::None,
-            &TextureSettings::new()
-        ).unwrap();
-    let boss_tex = Texture::from_path(
-            &mut window.factory,
-            &assets.join("boss.png"),
-            Flip::None,
-            &TextureSettings::new()
-        ).unwrap();
-    let enemy_tex = Texture::from_path(
-            &mut window.factory,
-            &assets.join("enemy.png"),
-            Flip::None,
-            &TextureSettings::new()
-        ).unwrap();
-    let ebullet_tex = Texture::from_path(
-            &mut window.factory,
-            &assets.join("ebullet.png"),
-            Flip::None,
-            &TextureSettings::new()
-        ).unwrap();
-    let bullet_tex = Texture::from_path(
-            &mut window.factory,
-            &assets.join("bullet.png"),
-            Flip::None,
-            &TextureSettings::new()
-        ).unwrap();
-    let missile_tex = Texture::from_path(
-            &mut window.factory,
-            &assets.join("missile.png"),
-            Flip::None,
-            &TextureSettings::new()
-        ).unwrap();
-    let explode_tex = Texture::from_path(
-            &mut window.factory,
-            &assets.join("explode.png"),
-            Flip::None,
-            &TextureSettings::new()
-        ).unwrap();
-    let explode2_tex = Texture::from_path(
-            &mut window.factory,
-            &assets.join("explode2.png"),
-            Flip::None,
-            &TextureSettings::new()
-        ).unwrap();
+        ).unwrap()
+    };
+
+    let bg = load_texture("bg.png");
+    let player_tex = load_texture("player.png");
+    let boss_tex = load_texture("boss.png");
+    let enemy_tex = load_texture("enemy.png");
+    let ebullet_tex = load_texture("ebullet.png");
+    let bullet_tex = load_texture("bullet.png");
+    let missile_tex = load_texture("missile.png");
+    let explode_tex = load_texture("explode.png");
+    let explode2_tex = load_texture("explode2.png");
 
     let mut id_gen = 0;
     let mut player = Enemy::new(&mut id_gen, [240., 400.], [0., 0.], &player_tex);
