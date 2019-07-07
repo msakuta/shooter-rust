@@ -190,7 +190,7 @@ fn main() {
                     for e in &mut (&mut enemies).iter_mut() {
                         if player.base.pos[0] - LIGHT_WIDTH < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < player.base.pos[0] + LIGHT_WIDTH &&
                             e.pos[1] - ENEMY_SIZE < player.base.pos[1] {
-                            e.health -= 1;
+                            e.health -= 1 + player.level() as i32;
                             add_tent(true, &e.pos, &mut id_gen, &mut rng);
                         }
                     }
