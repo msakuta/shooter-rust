@@ -73,6 +73,7 @@ fn main() {
 
     let mut rng = thread_rng();
 
+    let mut paused = false;
     let mut game_over = true;
 
     let [mut shots_bullet, mut shots_missile] = [0, 0];
@@ -96,7 +97,8 @@ fn main() {
         newvp
     }
 
-    let [mut key_up, mut key_down, mut key_left, mut key_right, mut key_shoot, mut key_change] = [false; 6];
+    let [mut key_up, mut key_down, mut key_left, mut key_right, mut key_shoot,
+        mut key_change, mut key_pause] = [false; 7];
 
     #[derive(PartialEq, Clone)]
     enum Weapon{
@@ -146,7 +148,7 @@ fn main() {
                     playback_rate})
             };
 
-            if !game_over {
+            if !game_over && !paused {
                 if key_up { player.move_up() }
                 if key_down { player.move_down() }
                 if key_left { player.move_left() }
@@ -193,7 +195,9 @@ fn main() {
                         }
                     }
                 }
+            }
 
+            if !game_over {
                 player.base.draw_tex(&context, graphics);
             }
 
@@ -202,14 +206,16 @@ fn main() {
             let mut to_delete: Vec<usize> = Vec::new();
 
             for (i, e) in &mut ((&mut items).iter_mut().enumerate()) {
-                if let Some(_) = e.animate() {
-                    to_delete.push(i);
-                    continue;
-                }
-                if let Some(_) = e.hits_player(&player.base) {
-                    to_delete.push(i);
-                    player.power += if e.texture == &power_tex { 1 } else { 10 };
-                    continue;
+                if !paused {
+                    if let Some(_) = e.animate() {
+                        to_delete.push(i);
+                        continue;
+                    }
+                    if let Some(_) = e.hits_player(&player.base) {
+                        to_delete.push(i);
+                        player.power += if e.texture == &power_tex { 1 } else { 10 };
+                        continue;
+                    }
                 }
                 e.draw_tex(&context, graphics);
             }
@@ -220,29 +226,33 @@ fn main() {
             }
             to_delete.clear();
 
-            if rng.gen_range(0, 100) < 1 {
-                let boss = rng.gen_range(0, 100) < 20;
-                enemies.push(Enemy::new(
-                    &mut id_gen,
-                    [rng.gen_range(0., WIDTH as f64), rng.gen_range(0., HEIGHT as f64)],
-                    [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
-                    if boss { &boss_tex } else { &enemy_tex })
-                    .health(if boss { 64 } else { 3 })
-                )
+            if !paused {
+                if rng.gen_range(0, 100) < 1 {
+                    let boss = rng.gen_range(0, 100) < 20;
+                    enemies.push(Enemy::new(
+                        &mut id_gen,
+                        [rng.gen_range(0., WIDTH as f64), rng.gen_range(0., HEIGHT as f64)],
+                        [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
+                        if boss { &boss_tex } else { &enemy_tex })
+                        .health(if boss { 64 } else { 3 })
+                    )
+                }
             }
 
             for (i, e) in &mut ((&mut enemies).iter_mut().enumerate()) {
-                if let Some(death_reason) = e.animate() {
-                    to_delete.push(i);
-                    if let DeathReason::Killed = death_reason {
-                        player.kills += 1;
-                        player.score += if e.texture == &boss_tex { 10 } else { 1 };
-                        if rng.gen_range(0, 100) < 20 {
-                            items.push(Enemy::new(&mut id_gen, e.pos, [0., 1.],
-                                if e.texture == &boss_tex { &power2_tex } else { &power_tex }));
+                if !paused {
+                    if let Some(death_reason) = e.animate() {
+                        to_delete.push(i);
+                        if let DeathReason::Killed = death_reason {
+                            player.kills += 1;
+                            player.score += if e.texture == &boss_tex { 10 } else { 1 };
+                            if rng.gen_range(0, 100) < 20 {
+                                items.push(Enemy::new(&mut id_gen, e.pos, [0., 1.],
+                                    if e.texture == &boss_tex { &power2_tex } else { &power_tex }));
+                            }
                         }
+                        continue;
                     }
-                    continue;
                 }
                 e.draw_tex(&context, graphics);
 
@@ -265,19 +275,21 @@ fn main() {
             to_delete.clear();
 
             for (i,b) in &mut bullets.iter_mut().enumerate() {
-                if let Some(death_reason) = b.animate_bullet(&mut enemies, &mut player.base) {
-                    to_delete.push(i);
+                if !paused {
+                    if let Some(death_reason) = b.animate_bullet(&mut enemies, &mut player.base) {
+                        to_delete.push(i);
 
-                    let base = b.get_base();
+                        let base = b.get_base();
 
-                    match death_reason {
-                        DeathReason::Killed | DeathReason::HitPlayer =>
-                            add_tent(if let Projectile::Bullet(_) = b { true } else { false }, &base.0.pos, &mut id_gen, &mut rng),
-                        _ => {}
-                    }
+                        match death_reason {
+                            DeathReason::Killed | DeathReason::HitPlayer =>
+                                add_tent(if let Projectile::Bullet(_) = b { true } else { false }, &base.0.pos, &mut id_gen, &mut rng),
+                            _ => {}
+                        }
 
-                    if let DeathReason::HitPlayer = death_reason {
-                        game_over = true;
+                        if let DeathReason::HitPlayer = death_reason {
+                            game_over = true;
+                        }
                     }
                 }
 
@@ -292,9 +304,11 @@ fn main() {
             to_delete.clear();
 
             for (i, e) in &mut ((&mut tent).iter_mut().enumerate()) {
-                if let Some(_) = e.animate_temp() {
-                    to_delete.push(i);
-                    continue;
+                if !paused {
+                    if let Some(_) = e.animate_temp() {
+                        to_delete.push(i);
+                        continue;
+                    }
                 }
                 e.draw_temp(&context, graphics);
             }
@@ -320,6 +334,10 @@ fn main() {
                     graphics
                 ).unwrap_or_default();
             };
+
+            if paused {
+                draw_text_pos("PAUSED", [(WIDTH / 2 - 80) as f64, (HEIGHT / 2) as f64], [1.0, 1.0, 0.0, 1.0], 20);
+            }
 
             if game_over {
                 let color = [1.0, 1.0, 1.0, 1.0];
@@ -393,6 +411,12 @@ fn main() {
                             }
                             key_change = tf;
                         },
+                        Key::P => {
+                            if !key_pause && tf {
+                                paused = !paused;
+                            }
+                            key_pause = tf;
+                        },
                         Key::Space => if tf {
                             items.clear();
                             enemies.clear();
@@ -403,8 +427,9 @@ fn main() {
                             player.reset();
                             shots_bullet = 0;
                             shots_missile = 0;
+                            paused = false;
                             game_over = false;
-                        }
+                        },
                         _ => {}
                     }
                 }
