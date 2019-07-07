@@ -77,7 +77,9 @@ impl<'a> Entity<'a>{
         if self.health <= 0 {
             Some(DeathReason::Killed)
         }
-        else if pos[0] < 0. || (WIDTH as f64) < pos[0] || pos[1] < 0. || (HEIGHT as f64) < pos[1] {
+        // Only remove if the velocity is going outward
+        else if pos[0] < 0. && self.velo[0] < 0. || (WIDTH as f64) < pos[0] && 0. < self.velo[0]
+            || pos[1] < 0. && self.velo[1] < 0. || (HEIGHT as f64) < pos[1] && 0. < self.velo[1] {
             Some(DeathReason::RangeOut)
         }
         else{

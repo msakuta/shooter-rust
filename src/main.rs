@@ -229,10 +229,22 @@ fn main() {
             if !paused {
                 if rng.gen_range(0, 100) < 1 {
                     let boss = rng.gen_range(0, 100) < 20;
+                    let (pos, velo) = match rng.gen_range(0, 3) {
+                        0 => { // top
+                            ([rng.gen_range(0., WIDTH as f64), 0.], [rng.gen::<f64>() - 0.5, rng.gen::<f64>() * 0.5])
+                        },
+                        1 => { // left
+                            ([0., rng.gen_range(0., WIDTH as f64)], [rng.gen::<f64>() * 0.5, rng.gen::<f64>() - 0.5])
+                        },
+                        2 => { // right
+                            ([WIDTH as f64, rng.gen_range(0., WIDTH as f64)], [-rng.gen::<f64>() * 0.5, rng.gen::<f64>() - 0.5])
+                        }
+                        _ => panic!("RNG returned out of range")
+                    };
                     enemies.push(Enemy::new(
                         &mut id_gen,
-                        [rng.gen_range(0., WIDTH as f64), rng.gen_range(0., HEIGHT as f64)],
-                        [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
+                        pos,
+                        velo,
                         if boss { &boss_tex } else { &enemy_tex })
                         .health(if boss { 64 } else { 3 })
                     )
