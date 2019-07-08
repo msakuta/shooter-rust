@@ -151,8 +151,12 @@ impl<'a> Player<'a>{
         self.power = 0;
     }
 
-    pub fn level(&self) -> u32{
+    pub fn power_level(&self) -> u32{
         self.power >> 4
+    }
+
+    pub fn difficulty_level(&self) -> u32{
+        self.score / 256
     }
 }
 

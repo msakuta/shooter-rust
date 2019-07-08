@@ -158,7 +158,7 @@ fn main() {
 
                 if Weapon::Bullet == weapon || Weapon::Missile == weapon {
                     if key_shoot && time % shoot_period == 0 {
-                        let level = player.level() as i32;
+                        let level = player.power_level() as i32;
                         for i in -1-level..2+level {
                             let speed = if let Weapon::Bullet = weapon { BULLET_SPEED } else { MISSILE_SPEED };
                             let mut ent = Entity::new(&mut id_gen, player.base.pos, [i as f64, -speed], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
@@ -190,7 +190,7 @@ fn main() {
                     for e in &mut (&mut enemies).iter_mut() {
                         if player.base.pos[0] - LIGHT_WIDTH < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < player.base.pos[0] + LIGHT_WIDTH &&
                             e.pos[1] - ENEMY_SIZE < player.base.pos[1] {
-                            e.health -= 1 + player.level() as i32;
+                            e.health -= 1 + player.power_level() as i32;
                             add_tent(true, &e.pos, &mut id_gen, &mut rng);
                         }
                     }
@@ -201,7 +201,9 @@ fn main() {
                 player.base.draw_tex(&context, graphics);
             }
 
-            time += 1;
+            if !paused {
+                time += 1;
+            }
 
             let mut to_delete: Vec<usize> = Vec::new();
 
@@ -226,28 +228,42 @@ fn main() {
             }
             to_delete.clear();
 
+            let wave_period = 1024;
             if !paused {
-                if rng.gen_range(0, 100) < 1 {
-                    let boss = rng.gen_range(0, 100) < 20;
-                    let (pos, velo) = match rng.gen_range(0, 3) {
-                        0 => { // top
-                            ([rng.gen_range(0., WIDTH as f64), 0.], [rng.gen::<f64>() - 0.5, rng.gen::<f64>() * 0.5])
-                        },
-                        1 => { // left
-                            ([0., rng.gen_range(0., WIDTH as f64)], [rng.gen::<f64>() * 0.5, rng.gen::<f64>() - 0.5])
-                        },
-                        2 => { // right
-                            ([WIDTH as f64, rng.gen_range(0., WIDTH as f64)], [-rng.gen::<f64>() * 0.5, rng.gen::<f64>() - 0.5])
-                        }
-                        _ => panic!("RNG returned out of range")
-                    };
-                    enemies.push(Enemy::new(
-                        &mut id_gen,
-                        pos,
-                        velo,
-                        if boss { &boss_tex } else { &enemy_tex })
-                        .health(if boss { 64 } else { 3 })
-                    )
+                let dice = 256;
+                let wave = time % wave_period;
+                if wave < wave_period * 3 / 4 {
+                    let (enemy_count, boss_count) = enemies.iter().fold((0, 0), |c, e| if e.texture == &boss_tex { (c.0, c.1 + 1) } else { (c.0 + 1, c.1) });
+                    let gen_amount = player.difficulty_level() * 4 + 8;
+                    let mut i = rng.gen_range(0, dice);
+                    while i < gen_amount {
+                        let weights = [
+                            if enemy_count < 128 { if player.score < 1024 { 64 } else { 16 } } else { 0 },
+                            if boss_count < 32 { 4 } else { 0 }];
+                        let allweights = weights.iter().fold(0, |sum, x| sum + x);
+
+                        let boss = rng.gen_range(0, allweights) > weights[0];
+                        let (pos, velo) = match rng.gen_range(0, 3) {
+                            0 => { // top
+                                ([rng.gen_range(0., WIDTH as f64), 0.], [rng.gen::<f64>() - 0.5, rng.gen::<f64>() * 0.5])
+                            },
+                            1 => { // left
+                                ([0., rng.gen_range(0., WIDTH as f64)], [rng.gen::<f64>() * 0.5, rng.gen::<f64>() - 0.5])
+                            },
+                            2 => { // right
+                                ([WIDTH as f64, rng.gen_range(0., WIDTH as f64)], [-rng.gen::<f64>() * 0.5, rng.gen::<f64>() - 0.5])
+                            }
+                            _ => panic!("RNG returned out of range")
+                        };
+                        enemies.push(Enemy::new(
+                            &mut id_gen,
+                            pos,
+                            velo,
+                            if boss { &boss_tex } else { &enemy_tex })
+                            .health(if boss { 64 } else { 3 })
+                        );
+                        i += rng.gen_range(0, dice);
+                    }
                 }
             }
 
@@ -362,9 +378,10 @@ fn main() {
             draw_text(&format!("Frame: {}", time), 0);
             draw_text(&format!("Score: {}", player.score), 1);
             draw_text(&format!("Kills: {}", player.kills), 2);
-            draw_text(&format!("Power: {}, Level: {}", player.power, player.level()), 3);
-            draw_text(&format!("shots_bullet: {}", shots_bullet), 4);
-            draw_text(&format!("shots_missile: {}", shots_missile), 5);
+            draw_text(&format!("Power: {}, Level: {}", player.power, player.power_level()), 3);
+            draw_text(&format!("Wave: {} Level: {}", time / wave_period, player.difficulty_level()), 4);
+            draw_text(&format!("shots_bullet: {}", shots_bullet), 5);
+            draw_text(&format!("shots_missile: {}", shots_missile), 6);
 
             let weapon_set = [(0, Weapon::Bullet, [1.,0.5,0.]), (2, Weapon::Light, [1.,1.,1.]), (3, Weapon::Missile, [0.,1.,0.])];
 
