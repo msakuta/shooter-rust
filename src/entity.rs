@@ -112,12 +112,15 @@ pub struct Player<'a>{
     pub base: Entity<'a>,
     pub score: u32,
     pub kills: u32,
-    pub power: u32
+    pub power: u32,
+    pub lives: u32,
+    /// invincibility time caused by death or bomb
+    pub invtime: u32
 }
 
 impl<'a> Player<'a>{
     pub fn new(base: Entity<'a>) -> Self{
-        Self{base, score: 0, kills: 0, power: 0}
+        Self{base, score: 0, kills: 0, power: 0, lives: PLAYER_LIVES, invtime: 0}
     }
 
     pub fn move_up(&mut self){
@@ -149,6 +152,8 @@ impl<'a> Player<'a>{
         self.score = 0;
         self.kills = 0;
         self.power = 0;
+        self.lives = PLAYER_LIVES;
+        self.invtime = 0;
     }
 
     pub fn power_level(&self) -> u32{

@@ -29,6 +29,7 @@ use crate::entity::{
 fn main() {
     use rand::Rng;
     let mut time = 0;
+    let mut disptime = 0;
     let opengl = OpenGL::V3_2;
     let mut window: PistonWindow =
         WindowSettings::new("Shooter Rust", [WINDOW_WIDTH, WINDOW_HEIGHT])
@@ -195,15 +196,22 @@ fn main() {
                         }
                     }
                 }
+
+                if 0 < player.invtime {
+                    player.invtime -= 1;
+                }
             }
 
             if !game_over {
-                player.base.draw_tex(&context, graphics);
+                if player.invtime == 0 || disptime % 2 == 0 {
+                    player.base.draw_tex(&context, graphics);
+                }
             }
 
             if !paused {
                 time += 1;
             }
+            disptime += 1;
 
             let mut to_delete: Vec<usize> = Vec::new();
 
@@ -316,7 +324,15 @@ fn main() {
                         }
 
                         if let DeathReason::HitPlayer = death_reason {
-                            game_over = true;
+                            if player.invtime == 0 && !game_over && 0 < player.lives {
+                                player.lives -= 1;
+                                if player.lives == 0 {
+                                    game_over = true;
+                                }
+                                else{
+                                    player.invtime = PLAYER_INVINCIBLE_TIME;
+                                }
+                            }
                         }
                     }
                 }
@@ -410,6 +426,15 @@ fn main() {
                 let weapons_image = sphere_image.color(if v.1 == weapon { [1., 1., 1., 1.] } else { [0.5, 0.5, 0.5, 1.] })
                 .src_rect([v.0 as f64 * 32., 0., 32., weapons_tex.get_height() as f64]);
                 weapons_image.draw(&weapons_tex, &context.draw_state, transform, graphics);
+            }
+
+            // Display player lives
+            for i in 0..player.lives {
+                let width = player_tex.get_width();
+                let height = player_tex.get_height();
+                let transl = translate([(WINDOW_WIDTH - (i + 1) as u32 * width) as f64, (WINDOW_HEIGHT - height) as f64]);
+                let transform = (Matrix(context.transform) * Matrix(transl)).0;
+                image(&player_tex, transform, graphics);
             }
 
         });

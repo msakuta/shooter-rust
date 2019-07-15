@@ -5,6 +5,8 @@ pub const HEIGHT: u32 = WINDOW_HEIGHT;
 
 pub const PLAYER_SPEED: f64 = 2.;
 pub const PLAYER_SIZE: f64 = 16.;
+pub const PLAYER_INVINCIBLE_TIME: u32 = 128;
+pub const PLAYER_LIVES: u32 = 3;
 pub const ENEMY_SIZE: f64 = 8.;
 pub const BULLET_SIZE: f64 = 8.;
 pub const BULLET_SPEED: f64 = 5.;
