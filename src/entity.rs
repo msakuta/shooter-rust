@@ -273,38 +273,51 @@ fn test_player_hit() {
 }
 
 
+pub struct EnemyBase(Entity, i32);
+
+impl EnemyBase{
+    pub fn new(id_gen: &mut u32, pos: [f64; 2], velo: [f64; 2]) -> Self{
+        Self(Entity::new(id_gen, pos, velo).health(64), 0)
+    }
+
+    pub fn health(mut self, val: i32) -> Self {
+        self.0 = self.0.health(val);
+        self
+    }
+}
+
 pub struct ShieldedBoss{
-    pub base: Entity,
+    pub base: EnemyBase,
     pub shield_health: i32
 }
 
 impl ShieldedBoss{
     pub fn new(id_gen: &mut u32, pos: [f64; 2], velo: [f64; 2]) -> Self{
-        Self{base: Entity::new(id_gen, pos, velo).health(64), shield_health: 64}
+        Self{base: EnemyBase(Entity::new(id_gen, pos, velo).health(64), 0), shield_health: 64}
     }
 }
 
 pub enum Enemy{
-    Enemy1(Entity),
-    Boss(Entity),
+    Enemy1(EnemyBase),
+    Boss(EnemyBase),
     ShieldedBoss(ShieldedBoss)
 }
 
 impl Enemy{
-    pub fn get_base<'b>(&'b self) -> &'b Entity{
+    pub fn get_base(&self) -> &Entity{
         match &self {
-            &Enemy::Enemy1(base) | &Enemy::Boss(base) => &base,
-            &Enemy::ShieldedBoss(boss) => &boss.base
+            &Enemy::Enemy1(base) | &Enemy::Boss(base) => &base.0,
+            &Enemy::ShieldedBoss(boss) => &boss.base.0
         }
     }
 
-    // pub fn get_base_mut<'b, 'c: 'b + 'a>(&'c mut self) -> &'b mut Entity{
-    //     let mref: &mut Self = self;
-    //     match mref {
-    //         Enemy::Enemy1(ref mut base) | Enemy::Boss(ref mut base) => base,
-    //         Enemy::ShieldedBoss(ref mut boss) => &mut boss.base
-    //     }
-    // }
+    pub fn get_base_mut(&mut self) -> &mut EnemyBase{
+        let mref: &mut Self = self;
+        match mref {
+            Enemy::Enemy1(ref mut base) | Enemy::Boss(ref mut base) => base,
+            Enemy::ShieldedBoss(ref mut boss) => &mut boss.base
+        }
+    }
 
     pub fn get_id(&self) -> u32{
         self.get_base().id
@@ -312,10 +325,10 @@ impl Enemy{
 
     pub fn damage(&mut self, val: i32){
         match self {
-            Enemy::Enemy1(ref mut base) | Enemy::Boss(ref mut base) => base.health -= val,
+            Enemy::Enemy1(ref mut base) | Enemy::Boss(ref mut base) => base.0.health -= val,
             Enemy::ShieldedBoss(ref mut boss) => {
                 if boss.shield_health < 16 {
-                    boss.base.health -= val
+                    boss.base.0.health -= val
                 }
                 else {
                     boss.shield_health -= val
@@ -324,18 +337,37 @@ impl Enemy{
         }
     }
 
-    pub fn animate<'b>(&'b mut self, time: u32) -> Option<DeathReason>{
+    pub fn predicted_damage(&self) -> i32 {
         match self {
-            Enemy::Enemy1(ref mut base) | Enemy::Boss(ref mut base) => base.animate(),
+            Enemy::Enemy1(base) | Enemy::Boss(base) => base.1,
+            Enemy::ShieldedBoss(boss) => boss.base.1
+        }
+    }
+
+    pub fn add_predicted_damage(&mut self, val: i32){
+        let e = self.get_base_mut();
+        e.1 += val;
+    }
+
+    pub fn total_health(&self) -> i32{
+        match self {
+            Enemy::ShieldedBoss(boss) => {
+                boss.base.0.health + boss.shield_health
+            },
+            _ => self.get_base().health
+        }
+    }
+
+    pub fn animate(&mut self, time: u32) -> Option<DeathReason>{
+        match self {
+            Enemy::Enemy1(ref mut base) | Enemy::Boss(ref mut base) => base.0.animate(),
             Enemy::ShieldedBoss(ref mut boss) => {
                 if boss.shield_health < 64 && time % 8 == 0 {
                     boss.shield_health += 1;
                 }
-                boss.base.animate()
+                boss.base.0.animate()
             }
         }
-        //let a = self.get_base_mut();
-        //a.animate()
     }
 
     pub fn draw(&self, context: &Context, g: &mut G2d, assets: &Assets){
@@ -344,7 +376,7 @@ impl Enemy{
             Enemy::Boss(_) | Enemy::ShieldedBoss(_) => &assets.boss_tex
         });
         if let Enemy::ShieldedBoss(ref boss) = self {
-            let pos = &boss.base.pos;
+            let pos = &boss.base.0.pos;
             let tex2 = &assets.shield_tex;
             let centerize = translate([-(tex2.get_width() as f64 / 2.), -(tex2.get_height() as f64 / 2.)]);
             let rotmat = rotate_radians(0 as f64);
@@ -386,6 +418,7 @@ pub enum Projectile{
 const MISSILE_DETECTION_RANGE: f64 = 256.;
 const MISSILE_HOMING_SPEED: f64 = 0.25;
 const MISSILE_TRAIL_LENGTH: usize = 20;
+const MISSILE_DAMAGE: i32 = 5;
 
 impl Projectile{
     pub fn get_base<'b>(&'b self) -> &'b BulletBase{
@@ -440,17 +473,21 @@ impl Projectile{
             },
             Projectile::Missile{base, target, trail} => {
                 if *target == 0 {
-                    let best = enemies.iter().fold((0, 1e5), |bestpair, enemy| {
+                    let best = enemies.iter_mut().fold((0, 1e5, None), |bestpair, enemy| {
                         let e = enemy.get_base();
                         let dist = vec2_len(vec2_sub(base.0.pos, e.pos));
-                        if dist < MISSILE_DETECTION_RANGE && dist < bestpair.1 {
-                            (e.id, dist)
+                        if dist < MISSILE_DETECTION_RANGE && dist < bestpair.1 && enemy.predicted_damage() < enemy.total_health() {
+                            (e.id, dist, Some(enemy))
                         }
                         else{
                             bestpair
                         }
                     });
                     *target = best.0;
+                    if let Some(enemy) = best.2 {
+                        enemy.add_predicted_damage(MISSILE_DAMAGE);
+                        println!("Add predicted damage: {} -> {}", enemy.predicted_damage() - MISSILE_DAMAGE, enemy.predicted_damage());
+                    }
                 }
                 else if let Some(target_enemy) = enemies.iter().find(|e| e.get_id() == *target) {
                     let target_ent = target_enemy.get_base();
@@ -479,7 +516,14 @@ impl Projectile{
                     trail.remove(0);
                 }
                 trail.push(base.0.pos);
-                Self::animate_player_bullet(base, enemies, player)
+                let res = Self::animate_player_bullet(base, enemies, player);
+                if let Some(_) = res {
+                    if let Some(target_enemy) = enemies.iter_mut().find(|e| e.get_id() == *target) {
+                        target_enemy.add_predicted_damage(-MISSILE_DAMAGE);
+                        println!("Reduce predicted damage: {} -> {}", target_enemy.predicted_damage() + MISSILE_DAMAGE, target_enemy.predicted_damage());
+                    }
+                }
+                res
             }
         }
     }

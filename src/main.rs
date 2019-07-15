@@ -19,6 +19,7 @@ use crate::entity::{
     DeathReason,
     Entity,
     Player,
+    EnemyBase,
     Enemy,
     ShieldedBoss,
     BulletBase,
@@ -249,11 +250,11 @@ fn main() {
                                 _ => panic!("RNG returned out of range")
                             };
                             enemies.push(if dice < accum[0] {
-                                Enemy::Enemy1(Entity::new(&mut id_gen, pos, velo)
+                                Enemy::Enemy1(EnemyBase::new(&mut id_gen, pos, velo)
                                 .health(3))
                             }
                             else if dice < accum[1] {
-                                Enemy::Boss(Entity::new(&mut id_gen, pos, velo)
+                                Enemy::Boss(EnemyBase::new(&mut id_gen, pos, velo)
                                 .health(64))
                             }
                             else {
@@ -282,7 +283,7 @@ fn main() {
                         player.score += if enemy.is_boss() { 10 } else { 1 };
                         if rng.gen_range(0, 100) < 20 {
                             let ent = Entity::new(&mut id_gen, enemy.get_base().pos, [0., 1.]);
-                            items.push(if enemy.is_boss() { Item::PowerUp(ent) } else { Item::PowerUp10(ent) });
+                            items.push(if enemy.is_boss() { Item::PowerUp10(ent) } else { Item::PowerUp(ent) });
                         }
                         continue;
                     }
@@ -486,6 +487,9 @@ fn main() {
                         Key::G =>
                             if cfg!(debug_assertions) && tf {
                                 player.score += 1000;
+                        },
+                        Key::H => if cfg!(debug_assertions) && tf {
+                            player.power += 16;
                         },
                         _ => {}
                     }
