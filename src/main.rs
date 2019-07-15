@@ -14,6 +14,7 @@ mod entity;
 
 use consts::*;
 use crate::entity::{
+    Assets,
     Matrix,
     DeathReason,
     Entity,
@@ -22,6 +23,7 @@ use crate::entity::{
     ShieldedBoss,
     BulletBase,
     Projectile,
+    Item,
     TempEntity};
 
 
@@ -36,39 +38,14 @@ fn main() {
         WindowSettings::new("Shooter Rust", [WINDOW_WIDTH, WINDOW_HEIGHT])
         .exit_on_esc(true).opengl(opengl).build().unwrap();
 
-    let assets = find_folder::Search::ParentsThenKids(3, 3)
-        .for_folder("assets").unwrap();
-
-    let mut load_texture = |name| {
-        Texture::from_path(
-            &mut window.factory,
-            &assets.join(name),
-            Flip::None,
-            &TextureSettings::new()
-        ).unwrap()
-    };
-
-    let bg = load_texture("bg.png");
-    let player_tex = load_texture("player.png");
-    let boss_tex = load_texture("boss.png");
-    let enemy_tex = load_texture("enemy.png");
-    let shield_tex = load_texture("shield.png");
-    let ebullet_tex = load_texture("ebullet.png");
-    let bullet_tex = load_texture("bullet.png");
-    let missile_tex = load_texture("missile.png");
-    let explode_tex = load_texture("explode.png");
-    let explode2_tex = load_texture("explode2.png");
-    let weapons_tex = load_texture("weapons.png");
-    let sphere_tex = load_texture("sphere.png");
-    let power_tex = load_texture("power.png");
-    let power2_tex = load_texture("power2.png");
+    let (assets, mut glyphs) = Assets::new(&mut window);
 
     let mut id_gen = 0;
-    let mut player = Player::new(Entity::new(&mut id_gen, [240., 400.], [0., 0.], &player_tex));
+    let mut player = Player::new(Entity::new(&mut id_gen, [240., 400.], [0., 0.]));
 
     let mut enemies = Vec::<Enemy>::new();
 
-    let mut items = Vec::<Entity>::new();
+    let mut items = Vec::<Item>::new();
 
     let mut bullets = Vec::<Projectile>::new();
 
@@ -80,11 +57,6 @@ fn main() {
     let mut game_over = true;
 
     let [mut shots_bullet, mut shots_missile] = [0, 0];
-
-    let ref font = assets.join("FiraSans-Regular.ttf");
-    let factory = window.factory.clone();
-    let mut glyphs = Glyphs::new(font, factory, TextureSettings::new()).unwrap();
-
 
     fn limit_viewport(viewport: &Viewport, ratio: f64, wwidth: u32, wheight: u32) -> Viewport{
         let vp_ratio = (viewport.rect[2] - viewport.rect[0]) as f64 /
@@ -125,7 +97,7 @@ fn main() {
 
                 wnd_context.trans(-1., -1.);
 
-                image(&bg, wnd_context.transform, graphics);
+                image(&assets.bg, wnd_context.transform, graphics);
 
                 context = Context::new_viewport(limit_viewport(&viewport, ratio, WINDOW_WIDTH, WINDOW_HEIGHT));
             }
@@ -139,13 +111,14 @@ fn main() {
                     [
                         pos[0] + 4. * (rng.gen::<f64>() - 0.5),
                         pos[1] + 4. * (rng.gen::<f64>() - 0.5)
-                    ], [0., 0.], if is_bullet { &explode_tex } else { &explode2_tex })
+                    ], [0., 0.])
                     .rotation(rng.gen::<f32>() * 2. * std::f32::consts::PI)
                     ;
                 let (playback_rate, max_frames) = if is_bullet { (2, 8) } else { (4, 6) };
                 ent = ent.health((max_frames * playback_rate) as i32);
 
                 tent.push(TempEntity{base: ent,
+                    texture: if is_bullet { &assets.explode_tex } else { &assets.explode2_tex },
                     max_frames,
                     width: if is_bullet { 16 } else { 32 },
                     playback_rate})
@@ -164,17 +137,17 @@ fn main() {
                         let level = player.power_level() as i32;
                         for i in -1-level..2+level {
                             let speed = if let Weapon::Bullet = weapon { BULLET_SPEED } else { MISSILE_SPEED };
-                            let mut ent = Entity::new(&mut id_gen, player.base.pos, [i as f64, -speed], if let Weapon::Bullet = weapon { &bullet_tex } else { &missile_tex })
+                            let mut ent = Entity::new(&mut id_gen, player.base.pos, [i as f64, -speed])
                                 .rotation((i as f32).atan2(speed as f32));
                             if let Weapon::Bullet = weapon {
                                 shots_bullet += 1;
                                 ent = ent.blend(Blend::Add);
-                                bullets.push(Projectile::Bullet(BulletBase(ent, true)))
+                                bullets.push(Projectile::Bullet(BulletBase(ent)))
                             }
                             else{
                                 shots_missile += 1;
                                 ent = ent.health(5);
-                                bullets.push(Projectile::Missile{base: BulletBase(ent, true), target: 0, trail: vec!()})
+                                bullets.push(Projectile::Missile{base: BulletBase(ent), target: 0, trail: vec!()})
                             }
                         }
                     }
@@ -205,7 +178,7 @@ fn main() {
 
             if !game_over {
                 if player.invtime == 0 || disptime % 2 == 0 {
-                    player.base.draw_tex(&context, graphics);
+                    player.base.draw_tex(&context, graphics, &assets.player_tex);
                 }
             }
 
@@ -218,22 +191,17 @@ fn main() {
 
             for (i, e) in &mut ((&mut items).iter_mut().enumerate()) {
                 if !paused {
-                    if let Some(_) = e.animate() {
+                    if let Some(_) = e.animate(&mut player) {
                         to_delete.push(i);
-                        continue;
-                    }
-                    if let Some(_) = e.hits_player(&player.base) {
-                        to_delete.push(i);
-                        player.power += if e.texture == &power_tex { 1 } else { 10 };
                         continue;
                     }
                 }
-                e.draw_tex(&context, graphics);
+                e.draw(&context, graphics, &assets);
             }
 
             for i in to_delete.iter().rev() {
                 let dead = items.remove(*i);
-                println!("Deleted Item id={}: {} / {}", dead.id, *i, items.len());
+                println!("Deleted Item id={}: {} / {}", dead.get_base().id, *i, items.len());
             }
             to_delete.clear();
 
@@ -281,20 +249,18 @@ fn main() {
                                 _ => panic!("RNG returned out of range")
                             };
                             enemies.push(if dice < accum[0] {
-                                Enemy::Enemy1(Entity::new(&mut id_gen, pos, velo, &enemy_tex)
+                                Enemy::Enemy1(Entity::new(&mut id_gen, pos, velo)
                                 .health(3))
                             }
                             else if dice < accum[1] {
-                                Enemy::Boss(Entity::new(&mut id_gen, pos, velo, &boss_tex)
+                                Enemy::Boss(Entity::new(&mut id_gen, pos, velo)
                                 .health(64))
                             }
                             else {
                                 Enemy::ShieldedBoss(ShieldedBoss::new(
                                     &mut id_gen,
                                     pos,
-                                    velo,
-                                    &boss_tex,
-                                    &shield_tex))
+                                    velo))
                             });
                         }
                         i += rng.gen_range(0, dice);
@@ -315,22 +281,20 @@ fn main() {
                         player.kills += 1;
                         player.score += if enemy.is_boss() { 10 } else { 1 };
                         if rng.gen_range(0, 100) < 20 {
-                            items.push(Entity::new(&mut id_gen, enemy.get_base().pos, [0., 1.],
-                                if enemy.is_boss() { &power2_tex } else { &power_tex }));
+                            let ent = Entity::new(&mut id_gen, enemy.get_base().pos, [0., 1.]);
+                            items.push(if enemy.is_boss() { Item::PowerUp(ent) } else { Item::PowerUp10(ent) });
                         }
                         continue;
                     }
                 }
-                enemy.draw(&context, graphics);
+                enemy.draw(&context, graphics, &assets);
 
                 let x: i32 = rng.gen_range(0, if enemy.is_boss() { 16 } else { 64 });
                 if x == 0 {
-                    bullets.push(Projectile::Bullet(BulletBase(Entity::new(
+                    bullets.push(Projectile::EnemyBullet(BulletBase(Entity::new(
                         &mut id_gen,
                         enemy.get_base().pos,
-                        [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
-                        &ebullet_tex)
-                    , false)))
+                        [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5]))))
                 }
             }
 
@@ -354,7 +318,7 @@ fn main() {
 
                         match death_reason {
                             DeathReason::Killed | DeathReason::HitPlayer =>
-                                add_tent(if let Projectile::Bullet(_) = b { true } else { false }, &base.0.pos, &mut id_gen, &mut rng),
+                                add_tent(if let Projectile::Missile{..} = b { false } else { true }, &base.0.pos, &mut id_gen, &mut rng),
                             _ => {}
                         }
 
@@ -372,7 +336,7 @@ fn main() {
                     }
                 }
 
-                b.draw(&context, graphics);
+                b.draw(&context, graphics, &assets);
             }
 
             for i in to_delete.iter().rev() {
@@ -447,7 +411,7 @@ fn main() {
 
             // Display weapon selection
             use piston_window::math::translate;
-            let centerize = translate([-((sphere_tex.get_width() * weapon_set.len() as u32) as f64 / 2.), -(sphere_tex.get_height() as f64 / 2.)]);
+            let centerize = translate([-((assets.sphere_tex.get_width() * weapon_set.len() as u32) as f64 / 2.), -(assets.sphere_tex.get_height() as f64 / 2.)]);
             for (i,v) in weapon_set.iter().enumerate() {
                 let sphere_image = if v.1 == weapon {
                     Image::new_color([v.2[0], v.2[1], v.2[2], 1.])
@@ -457,19 +421,19 @@ fn main() {
                 };
                 let transl = translate([((WINDOW_WIDTH + WIDTH) / 2 + i as u32 * 32) as f64, (WINDOW_HEIGHT * 3 / 4) as f64]);
                 let transform = (Matrix(context.transform) * Matrix(transl) * Matrix(centerize)).0;
-                sphere_image.draw(&sphere_tex, &context.draw_state, transform, graphics);
+                sphere_image.draw(&assets.sphere_tex, &context.draw_state, transform, graphics);
                 let weapons_image = sphere_image.color(if v.1 == weapon { [1., 1., 1., 1.] } else { [0.5, 0.5, 0.5, 1.] })
-                .src_rect([v.0 as f64 * 32., 0., 32., weapons_tex.get_height() as f64]);
-                weapons_image.draw(&weapons_tex, &context.draw_state, transform, graphics);
+                .src_rect([v.0 as f64 * 32., 0., 32., assets.weapons_tex.get_height() as f64]);
+                weapons_image.draw(&assets.weapons_tex, &context.draw_state, transform, graphics);
             }
 
             // Display player lives
             for i in 0..player.lives {
-                let width = player_tex.get_width();
-                let height = player_tex.get_height();
+                let width = assets.player_tex.get_width();
+                let height = assets.player_tex.get_height();
                 let transl = translate([(WINDOW_WIDTH - (i + 1) as u32 * width) as f64, (WINDOW_HEIGHT - height) as f64]);
                 let transform = (Matrix(context.transform) * Matrix(transl)).0;
-                image(&player_tex, transform, graphics);
+                image(&assets.player_tex, transform, graphics);
             }
 
         });

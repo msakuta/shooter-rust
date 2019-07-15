@@ -7,15 +7,68 @@ use vecmath::*;
 
 use super::consts::*;
 
+pub struct Assets{
+    pub bg: G2dTexture,
+    pub weapons_tex: G2dTexture,
+    pub boss_tex: G2dTexture,
+    pub enemy_tex: G2dTexture,
+    pub player_tex: G2dTexture,
+    pub shield_tex: G2dTexture,
+    pub ebullet_tex: G2dTexture,
+    pub bullet_tex: G2dTexture,
+    pub missile_tex: G2dTexture,
+    pub explode_tex: G2dTexture,
+    pub explode2_tex: G2dTexture,
+    pub sphere_tex: G2dTexture,
+    pub power_tex: G2dTexture,
+    pub power2_tex: G2dTexture,
+}
+
+impl Assets{
+    pub fn new(window: &mut PistonWindow) -> (Self, Glyphs) {
+        let assets_loader = find_folder::Search::ParentsThenKids(3, 3)
+            .for_folder("assets").unwrap();
+
+        let ref font = assets_loader.join("FiraSans-Regular.ttf");
+        let factory = window.factory.clone();
+        let glyphs = Glyphs::new(font, factory, TextureSettings::new()).unwrap();
+
+        let mut load_texture = |name| {
+            Texture::from_path(
+                &mut window.factory,
+                &assets_loader.join(name),
+                Flip::None,
+                &TextureSettings::new()
+            ).unwrap()
+        };
+
+        (Self{
+            bg: load_texture("bg.png"),
+            weapons_tex: load_texture("weapons.png"),
+            boss_tex: load_texture("boss.png"),
+            enemy_tex: load_texture("enemy.png"),
+            player_tex: load_texture("player.png"),
+            shield_tex: load_texture("shield.png"),
+            ebullet_tex: load_texture("ebullet.png"),
+            bullet_tex: load_texture("bullet.png"),
+            missile_tex: load_texture("missile.png"),
+            explode_tex: load_texture("explode.png"),
+            explode2_tex: load_texture("explode2.png"),
+            sphere_tex: load_texture("sphere.png"),
+            power_tex: load_texture("power.png"),
+            power2_tex: load_texture("power2.png"),
+        }, glyphs)
+    }
+}
+
 /// The base structure of all Entities.  Implements common methods.
-pub struct Entity<'a>{
+pub struct Entity{
     pub id: u32,
     pub pos: [f64; 2],
     pub velo: [f64; 2],
     pub health: i32,
     pub rotation: f32,
     pub blend: Option<Blend>,
-    pub texture: &'a G2dTexture
 }
 
 pub enum DeathReason{
@@ -38,8 +91,8 @@ impl<T> Mul for Matrix<T>
     }
 }
 
-impl<'a> Entity<'a>{
-    pub fn new(id_gen: &mut u32, pos: [f64; 2], velo: [f64; 2], texture: &'a G2dTexture) -> Self{
+impl Entity{
+    pub fn new(id_gen: &mut u32, pos: [f64; 2], velo: [f64; 2]) -> Self{
         *id_gen += 1;
         Self{
             id: *id_gen,
@@ -48,7 +101,6 @@ impl<'a> Entity<'a>{
             health: 1,
             rotation: 0.,
             blend: None,
-            texture: texture
         }
     }
 
@@ -87,9 +139,9 @@ impl<'a> Entity<'a>{
         }
     }
 
-    pub fn draw_tex(&self, context: &Context, g: &mut G2d){
+    pub fn draw_tex(&self, context: &Context, g: &mut G2d, texture: &G2dTexture){
         let pos = &self.pos;
-        let tex2 = self.texture;
+        let tex2 = texture;
         let centerize = translate([-(tex2.get_width() as f64 / 2.), -(tex2.get_height() as f64 / 2.)]);
         let rotmat = rotate_radians(self.rotation as f64);
         let translate = translate(*pos);
@@ -108,8 +160,8 @@ impl<'a> Entity<'a>{
     }
 }
 
-pub struct Player<'a>{
-    pub base: Entity<'a>,
+pub struct Player{
+    pub base: Entity,
     pub score: u32,
     pub kills: u32,
     pub power: u32,
@@ -118,8 +170,8 @@ pub struct Player<'a>{
     pub invtime: u32
 }
 
-impl<'a> Player<'a>{
-    pub fn new(base: Entity<'a>) -> Self{
+impl Player{
+    pub fn new(base: Entity) -> Self{
         Self{base, score: 0, kills: 0, power: 0, lives: PLAYER_LIVES, invtime: 0}
     }
 
@@ -165,25 +217,24 @@ impl<'a> Player<'a>{
     }
 }
 
-pub struct ShieldedBoss<'a>{
-    pub base: Entity<'a>,
-    pub shield_tex: &'a G2dTexture,
+pub struct ShieldedBoss{
+    pub base: Entity,
     pub shield_health: i32
 }
 
-impl<'a> ShieldedBoss<'a>{
-    pub fn new(id_gen: &mut u32, pos: [f64; 2], velo: [f64; 2], tex: &'a G2dTexture, shield_tex: &'a G2dTexture) -> Self{
-        Self{base: Entity::new(id_gen, pos, velo, tex).health(64), shield_tex, shield_health: 64}
+impl ShieldedBoss{
+    pub fn new(id_gen: &mut u32, pos: [f64; 2], velo: [f64; 2]) -> Self{
+        Self{base: Entity::new(id_gen, pos, velo).health(64), shield_health: 64}
     }
 }
 
-pub enum Enemy<'a>{
-    Enemy1(Entity<'a>),
-    Boss(Entity<'a>),
-    ShieldedBoss(ShieldedBoss<'a>)
+pub enum Enemy{
+    Enemy1(Entity),
+    Boss(Entity),
+    ShieldedBoss(ShieldedBoss)
 }
 
-impl<'a> Enemy<'a>{
+impl Enemy{
     pub fn get_base<'b>(&'b self) -> &'b Entity{
         match &self {
             &Enemy::Enemy1(base) | &Enemy::Boss(base) => &base,
@@ -231,11 +282,14 @@ impl<'a> Enemy<'a>{
         //a.animate()
     }
 
-    pub fn draw(&self, context: &Context, g: &mut G2d){
-        self.get_base().draw_tex(context, g);
+    pub fn draw(&self, context: &Context, g: &mut G2d, assets: &Assets){
+        self.get_base().draw_tex(context, g, match self {
+            Enemy::Enemy1(_) => &assets.enemy_tex,
+            Enemy::Boss(_) | Enemy::ShieldedBoss(_) => &assets.boss_tex
+        });
         if let Enemy::ShieldedBoss(ref boss) = self {
             let pos = &boss.base.pos;
-            let tex2 = boss.shield_tex;
+            let tex2 = &assets.shield_tex;
             let centerize = translate([-(tex2.get_width() as f64 / 2.), -(tex2.get_height() as f64 / 2.)]);
             let rotmat = rotate_radians(0 as f64);
             let scalemat = scale(boss.shield_health as f64 / 64., boss.shield_health as f64 / 64.);
@@ -265,62 +319,69 @@ impl<'a> Enemy<'a>{
     }
 }
 
-pub struct BulletBase<'a>(pub Entity<'a>, pub bool);
+pub struct BulletBase(pub Entity);
 
-pub enum Projectile<'a>{
-    Bullet(BulletBase<'a>),
-    Missile{base: BulletBase<'a>, target: u32, trail: Vec<[f64; 2]>}
+pub enum Projectile{
+    Bullet(BulletBase),
+    EnemyBullet(BulletBase),
+    Missile{base: BulletBase, target: u32, trail: Vec<[f64; 2]>}
 }
 
 const MISSILE_DETECTION_RANGE: f64 = 256.;
 const MISSILE_HOMING_SPEED: f64 = 0.25;
 const MISSILE_TRAIL_LENGTH: usize = 20;
 
-impl<'a> Projectile<'a>{
+impl Projectile{
     pub fn get_base<'b>(&'b self) -> &'b BulletBase{
         match &self {
-            &Projectile::Bullet(base) => base,
+            &Projectile::Bullet(base) | &Projectile::EnemyBullet(base) => base,
             &Projectile::Missile{base, target: _, trail: _} => base
         }
     }
     // pub fn get_base_mut(&'a mut self) -> &'a mut BulletBase{
     //     match &mut self {
-    //         &mut Projectile::Bullet(base) => &mut base,
+    //         &mut Projectile::Bullet(base) | &mut Projectile::Bullet(base) => &mut base,
     //         &mut Projectile::Missile(base, _) => &mut base
     //     }
     // }
 
     pub fn get_type(&self) -> &str{
         match &self{
-            &Projectile::Bullet(_) => "Bullet",
-            &Projectile::Missile{base: _, target: _, trail: _} => "Missile"
+            &Projectile::Bullet(_) | &Projectile::EnemyBullet(_) => "Bullet",
+            &Projectile::Missile{..} => "Missile"
         }
     }
 
-    fn animate_common(mut base: &mut BulletBase, enemies: &mut Vec<Enemy>, mut player: &mut Entity) -> Option<DeathReason>{
+    fn animate_player_bullet(mut base: &mut BulletBase, enemies: &mut Vec<Enemy>, mut _player: &mut Entity) -> Option<DeathReason>{
         let bbox = Self::get_bb_base(base);
-        let &mut BulletBase(ent, team) = &mut base;
-        if *team {
-            for enemy in enemies.iter_mut() {
-                if enemy.test_hit(bbox) {
-                    enemy.damage(ent.health);
-                    ent.health = 0;
-                    break;
-                }
-            }
-        }
-        else {
-            if let Some(death_reason) = ent.hits_player(player) {
-                player.health -= ent.health;
-                return Some(death_reason)
+        let &mut BulletBase(ent) = &mut base;
+        for enemy in enemies.iter_mut() {
+            if enemy.test_hit(bbox) {
+                enemy.damage(ent.health);
+                ent.health = 0;
+                break;
             }
         }
         ent.animate()
     }
 
+    fn animate_enemy_bullet(mut base: &mut BulletBase, _enemies: &mut Vec<Enemy>, mut player: &mut Entity) -> Option<DeathReason>{
+        let &mut BulletBase(ent) = &mut base;
+        if let Some(death_reason) = ent.hits_player(player) {
+            player.health -= ent.health;
+            return Some(death_reason)
+        }
+        ent.animate()
+    }
+
     pub fn animate_bullet(&mut self, enemies: &mut Vec<Enemy>, player: &mut Entity) -> Option<DeathReason>{
-        Self::animate_common(match self {
-            Projectile::Bullet(base) => base,
+        match self {
+            Projectile::Bullet(base) => {
+                Self::animate_player_bullet(base, enemies, player)
+            },
+            Projectile::EnemyBullet(base) => {
+                Self::animate_enemy_bullet(base, enemies, player)
+            },
             Projectile::Missile{base, target, trail} => {
                 if *target == 0 {
                     let best = enemies.iter().fold((0, 1e5), |bestpair, enemy| {
@@ -362,9 +423,9 @@ impl<'a> Projectile<'a>{
                     trail.remove(0);
                 }
                 trail.push(base.0.pos);
-                base
+                Self::animate_player_bullet(base, enemies, player)
             }
-        }, enemies, player)
+        }
     }
 
     pub fn get_bb_base(base: &BulletBase) -> [f64; 4]{
@@ -378,7 +439,7 @@ impl<'a> Projectile<'a>{
         Self::get_bb_base(e)
     }
 
-    pub fn draw(&self, c: &Context, g: &mut G2d){
+    pub fn draw(&self, c: &Context, g: &mut G2d, assets: &Assets){
         if let Projectile::Missile{base: _, target: _, trail} = self {
             let mut iter = trail.iter().enumerate();
             if let Some(mut prev) = iter.next() {
@@ -390,14 +451,59 @@ impl<'a> Projectile<'a>{
                 }
             }
         }
-        self.get_base().0.draw_tex(c, g);
+        self.get_base().0.draw_tex(c, g, match self {
+            Projectile::Bullet(_) => &assets.bullet_tex,
+            Projectile::EnemyBullet(_) => &assets.ebullet_tex,
+            Projectile::Missile{..} => &assets.missile_tex,
+        });
+    }
+}
+
+
+pub enum Item{
+    PowerUp(Entity),
+    PowerUp10(Entity)
+}
+
+impl Item{
+    pub fn get_base(&self) -> &Entity{
+        match self {
+            Item::PowerUp(ent) | Item::PowerUp10(ent) => ent,
+        }
+    }
+
+    pub fn draw(&self, c: &Context, g: &mut G2d, assets: &Assets){
+        match self {
+            Item::PowerUp(item) => item.draw_tex(c, g, &assets.power_tex),
+            Item::PowerUp10(item) => item.draw_tex(c, g, &assets.power2_tex)
+        }
+    }
+
+    pub fn power_value(&self) -> u32 {
+        match self {
+            Item::PowerUp(_) => 1,
+            Item::PowerUp10(_) => 10,
+        }
+    }
+
+    pub fn animate(&mut self, player: &mut Player) -> Option<DeathReason> {
+        match self {
+            Item::PowerUp(ent) | Item::PowerUp10(ent) => {
+                if let Some(_) = ent.hits_player(&player.base) {
+                    player.power += self.power_value();
+                    return Some(DeathReason::Killed)
+                }
+                ent.animate()
+            },
+        }
     }
 }
 
 
 
 pub struct TempEntity<'a>{
-    pub base: Entity<'a>,
+    pub base: Entity,
+    pub texture: &'a G2dTexture,
     pub max_frames: u32,
     pub width: u32,
     pub playback_rate: u32
@@ -416,7 +522,7 @@ impl<'a> TempEntity<'a>{
 
     pub fn draw_temp(&self, context: &Context, g: &mut G2d){
         let pos = &self.base.pos;
-        let tex2 = self.base.texture;
+        let tex2 = self.texture;
         let centerize = translate([-(16. / 2.), -(tex2.get_height() as f64 / 2.)]);
         let rotmat = rotate_radians(self.base.rotation as f64);
         let translate = translate(*pos);
