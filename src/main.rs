@@ -19,6 +19,7 @@ use crate::entity::{
     Entity,
     Player,
     Enemy,
+    ShieldedBoss,
     BulletBase,
     Projectile,
     TempEntity};
@@ -51,6 +52,7 @@ fn main() {
     let player_tex = load_texture("player.png");
     let boss_tex = load_texture("boss.png");
     let enemy_tex = load_texture("enemy.png");
+    let shield_tex = load_texture("shield.png");
     let ebullet_tex = load_texture("ebullet.png");
     let bullet_tex = load_texture("bullet.png");
     let missile_tex = load_texture("missile.png");
@@ -62,11 +64,11 @@ fn main() {
     let power2_tex = load_texture("power2.png");
 
     let mut id_gen = 0;
-    let mut player = Player::new(Enemy::new(&mut id_gen, [240., 400.], [0., 0.], &player_tex));
+    let mut player = Player::new(Entity::new(&mut id_gen, [240., 400.], [0., 0.], &player_tex));
 
     let mut enemies = Vec::<Enemy>::new();
 
-    let mut items = Vec::<Enemy>::new();
+    let mut items = Vec::<Entity>::new();
 
     let mut bullets = Vec::<Projectile>::new();
 
@@ -188,11 +190,10 @@ fn main() {
                             player.base.pos[0] + i as f64, 0.],
                             context.transform, graphics);
                     }
-                    for e in &mut (&mut enemies).iter_mut() {
-                        if player.base.pos[0] - LIGHT_WIDTH < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < player.base.pos[0] + LIGHT_WIDTH &&
-                            e.pos[1] - ENEMY_SIZE < player.base.pos[1] {
-                            e.health -= 1 + player.power_level() as i32;
-                            add_tent(true, &e.pos, &mut id_gen, &mut rng);
+                    for enemy in enemies.iter_mut() {
+                        if enemy.test_hit([player.base.pos[0] - LIGHT_WIDTH, 0., player.base.pos[0] + LIGHT_WIDTH, player.base.pos[1]]) {
+                            add_tent(true, &enemy.get_base().pos, &mut id_gen, &mut rng);
+                            enemy.damage(1 + player.power_level() as i32);
                         }
                     }
                 }
@@ -232,7 +233,7 @@ fn main() {
 
             for i in to_delete.iter().rev() {
                 let dead = items.remove(*i);
-                println!("Deleted Item id={}: {} / {}", dead.id, *i, enemies.len());
+                println!("Deleted Item id={}: {} / {}", dead.id, *i, items.len());
             }
             to_delete.clear();
 
@@ -241,62 +242,92 @@ fn main() {
                 let dice = 256;
                 let wave = time % wave_period;
                 if wave < wave_period * 3 / 4 {
-                    let (enemy_count, boss_count) = enemies.iter().fold((0, 0), |c, e| if e.texture == &boss_tex { (c.0, c.1 + 1) } else { (c.0 + 1, c.1) });
+                    let (enemy_count, boss_count, shielded_boss_count) = enemies.iter().fold((0, 0, 0),
+                        |c, e| match e {
+                            Enemy::Enemy1(_) => (c.0 + 1, c.1, c.2),
+                            Enemy::Boss(_) => (c.0, c.1 + 1, c.2),
+                            Enemy::ShieldedBoss(_) => (c.0, c.1, c.2 + 1)
+                        });
                     let gen_amount = player.difficulty_level() * 4 + 8;
                     let mut i = rng.gen_range(0, dice);
                     while i < gen_amount {
                         let weights = [
                             if enemy_count < 128 { if player.score < 1024 { 64 } else { 16 } } else { 0 },
-                            if boss_count < 32 { 4 } else { 0 }];
+                            if boss_count < 32 { 4 } else { 0 },
+                            if shielded_boss_count < 32 { std::cmp::min(4, player.difficulty_level()) } else { 0 }];
                         let allweights = weights.iter().fold(0, |sum, x| sum + x);
-
-                        let boss = rng.gen_range(0, allweights) > weights[0];
-                        let (pos, velo) = match rng.gen_range(0, 3) {
-                            0 => { // top
-                                ([rng.gen_range(0., WIDTH as f64), 0.], [rng.gen::<f64>() - 0.5, rng.gen::<f64>() * 0.5])
-                            },
-                            1 => { // left
-                                ([0., rng.gen_range(0., WIDTH as f64)], [rng.gen::<f64>() * 0.5, rng.gen::<f64>() - 0.5])
-                            },
-                            2 => { // right
-                                ([WIDTH as f64, rng.gen_range(0., WIDTH as f64)], [-rng.gen::<f64>() * 0.5, rng.gen::<f64>() - 0.5])
+                        let accum = {
+                            let mut accum = [0; 3];
+                            let mut accumulator = 0;
+                            for (i,e) in weights.iter().enumerate() {
+                                accumulator += e;
+                                accum[i] = accumulator;
                             }
-                            _ => panic!("RNG returned out of range")
+                            accum
                         };
-                        enemies.push(Enemy::new(
-                            &mut id_gen,
-                            pos,
-                            velo,
-                            if boss { &boss_tex } else { &enemy_tex })
-                            .health(if boss { 64 } else { 3 })
-                        );
+
+                        if 0 < allweights {
+                            let dice = rng.gen_range(0, allweights);
+                            let (pos, velo) = match rng.gen_range(0, 3) {
+                                0 => { // top
+                                    ([rng.gen_range(0., WIDTH as f64), 0.], [rng.gen::<f64>() - 0.5, rng.gen::<f64>() * 0.5])
+                                },
+                                1 => { // left
+                                    ([0., rng.gen_range(0., WIDTH as f64)], [rng.gen::<f64>() * 0.5, rng.gen::<f64>() - 0.5])
+                                },
+                                2 => { // right
+                                    ([WIDTH as f64, rng.gen_range(0., WIDTH as f64)], [-rng.gen::<f64>() * 0.5, rng.gen::<f64>() - 0.5])
+                                }
+                                _ => panic!("RNG returned out of range")
+                            };
+                            enemies.push(if dice < accum[0] {
+                                Enemy::Enemy1(Entity::new(&mut id_gen, pos, velo, &enemy_tex)
+                                .health(3))
+                            }
+                            else if dice < accum[1] {
+                                Enemy::Boss(Entity::new(&mut id_gen, pos, velo, &boss_tex)
+                                .health(64))
+                            }
+                            else {
+                                Enemy::ShieldedBoss(ShieldedBoss::new(
+                                    &mut id_gen,
+                                    pos,
+                                    velo,
+                                    &boss_tex,
+                                    &shield_tex))
+                            });
+                        }
                         i += rng.gen_range(0, dice);
                     }
                 }
             }
 
-            for (i, e) in &mut ((&mut enemies).iter_mut().enumerate()) {
+            for (i, enemy) in &mut ((&mut enemies).iter_mut().enumerate()) {
                 if !paused {
-                    if let Some(death_reason) = e.animate() {
-                        to_delete.push(i);
-                        if let DeathReason::Killed = death_reason {
-                            player.kills += 1;
-                            player.score += if e.texture == &boss_tex { 10 } else { 1 };
-                            if rng.gen_range(0, 100) < 20 {
-                                items.push(Enemy::new(&mut id_gen, e.pos, [0., 1.],
-                                    if e.texture == &boss_tex { &power2_tex } else { &power_tex }));
-                            }
+                    let killed = {
+                        if let Some(death_reason) = enemy.animate(time) {
+                            to_delete.push(i);
+                            if let DeathReason::Killed = death_reason {true} else{false}
+                        }
+                        else {false}
+                    };
+                    if killed {
+                        player.kills += 1;
+                        player.score += if enemy.is_boss() { 10 } else { 1 };
+                        if rng.gen_range(0, 100) < 20 {
+                            items.push(Entity::new(&mut id_gen, enemy.get_base().pos, [0., 1.],
+                                if enemy.is_boss() { &power2_tex } else { &power_tex }));
                         }
                         continue;
                     }
                 }
-                e.draw_tex(&context, graphics);
+                enemy.draw(&context, graphics);
 
-                let x: i32 = rng.gen_range(0, if e.texture == &boss_tex { 16 } else { 64 });
+                let x: i32 = rng.gen_range(0, if enemy.is_boss() { 16 } else { 64 });
                 if x == 0 {
                     bullets.push(Projectile::Bullet(BulletBase(Entity::new(
                         &mut id_gen,
-                        e.pos,
+                        enemy.get_base().pos,
                         [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5],
                         &ebullet_tex)
                     , false)))
@@ -305,7 +336,11 @@ fn main() {
 
             for i in to_delete.iter().rev() {
                 let dead = enemies.remove(*i);
-                println!("Deleted Enemy {} id={}: {} / {}", if dead.texture == &boss_tex { "boss" } else {"enemy"}, dead.id, *i, enemies.len());
+                println!("Deleted Enemy {} id={}: {} / {}", match dead {
+                    Enemy::Enemy1(_) => "enemy",
+                    Enemy::Boss(_) => "boss",
+                    Enemy::ShieldedBoss(_) => "ShieldedBoss"
+                }, dead.get_id(), *i, enemies.len());
             }
 
             to_delete.clear();
@@ -483,6 +518,10 @@ fn main() {
                             shots_missile = 0;
                             paused = false;
                             game_over = false;
+                        },
+                        Key::G =>
+                            if cfg!(debug_assertions) && tf {
+                                player.score += 1000;
                         },
                         _ => {}
                     }

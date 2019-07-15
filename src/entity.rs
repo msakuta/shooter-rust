@@ -2,7 +2,7 @@
 use piston_window::*;
 use piston_window::draw_state::Blend;
 use std::ops::{Add, Mul};
-use piston_window::math::{rotate_radians, translate};
+use piston_window::math::{rotate_radians, translate, scale};
 use vecmath::*;
 
 use super::consts::*;
@@ -165,7 +165,105 @@ impl<'a> Player<'a>{
     }
 }
 
-pub type Enemy<'a> = Entity<'a>;
+pub struct ShieldedBoss<'a>{
+    pub base: Entity<'a>,
+    pub shield_tex: &'a G2dTexture,
+    pub shield_health: i32
+}
+
+impl<'a> ShieldedBoss<'a>{
+    pub fn new(id_gen: &mut u32, pos: [f64; 2], velo: [f64; 2], tex: &'a G2dTexture, shield_tex: &'a G2dTexture) -> Self{
+        Self{base: Entity::new(id_gen, pos, velo, tex).health(64), shield_tex, shield_health: 64}
+    }
+}
+
+pub enum Enemy<'a>{
+    Enemy1(Entity<'a>),
+    Boss(Entity<'a>),
+    ShieldedBoss(ShieldedBoss<'a>)
+}
+
+impl<'a> Enemy<'a>{
+    pub fn get_base<'b>(&'b self) -> &'b Entity{
+        match &self {
+            &Enemy::Enemy1(base) | &Enemy::Boss(base) => &base,
+            &Enemy::ShieldedBoss(boss) => &boss.base
+        }
+    }
+
+    // pub fn get_base_mut<'b, 'c: 'b + 'a>(&'c mut self) -> &'b mut Entity{
+    //     let mref: &mut Self = self;
+    //     match mref {
+    //         Enemy::Enemy1(ref mut base) | Enemy::Boss(ref mut base) => base,
+    //         Enemy::ShieldedBoss(ref mut boss) => &mut boss.base
+    //     }
+    // }
+
+    pub fn get_id(&self) -> u32{
+        self.get_base().id
+    }
+
+    pub fn damage(&mut self, val: i32){
+        match self {
+            Enemy::Enemy1(ref mut base) | Enemy::Boss(ref mut base) => base.health -= val,
+            Enemy::ShieldedBoss(ref mut boss) => {
+                if boss.shield_health < 16 {
+                    boss.base.health -= val
+                }
+                else {
+                    boss.shield_health -= val
+                }
+            }
+        }
+    }
+
+    pub fn animate<'b>(&'b mut self, time: u32) -> Option<DeathReason>{
+        match self {
+            Enemy::Enemy1(ref mut base) | Enemy::Boss(ref mut base) => base.animate(),
+            Enemy::ShieldedBoss(ref mut boss) => {
+                if boss.shield_health < 64 && time % 8 == 0 {
+                    boss.shield_health += 1;
+                }
+                boss.base.animate()
+            }
+        }
+        //let a = self.get_base_mut();
+        //a.animate()
+    }
+
+    pub fn draw(&self, context: &Context, g: &mut G2d){
+        self.get_base().draw_tex(context, g);
+        if let Enemy::ShieldedBoss(ref boss) = self {
+            let pos = &boss.base.pos;
+            let tex2 = boss.shield_tex;
+            let centerize = translate([-(tex2.get_width() as f64 / 2.), -(tex2.get_height() as f64 / 2.)]);
+            let rotmat = rotate_radians(0 as f64);
+            let scalemat = scale(boss.shield_health as f64 / 64., boss.shield_health as f64 / 64.);
+            let translate = translate(*pos);
+            let draw_state = context.draw_state;
+            let image   = Image::new().rect([0., 0., tex2.get_width() as f64, tex2.get_height() as f64]);
+            image.draw(tex2, &draw_state, (Matrix(context.transform) * Matrix(translate) * Matrix(scalemat) * Matrix(rotmat) * Matrix(centerize)).0, g);
+        }
+    }
+
+    pub fn test_hit(&self, rect: [f64; 4]) -> bool{
+        let rect2 = self.get_bb();
+        rect[0] < rect2[2] && rect2[0] < rect[2] && rect[1] < rect2[3] && rect2[1] < rect[3]
+    }
+
+    pub fn get_bb(&self) -> [f64; 4]{
+        let size = if let Enemy::ShieldedBoss(boss) = self { boss.shield_health as f64 } else { ENEMY_SIZE };
+        let e = self.get_base();
+        [e.pos[0] - size, e.pos[1] - size, e.pos[0] + size, e.pos[1] + size]
+    }
+
+    pub fn is_boss(&self) -> bool {
+        match self {
+            Enemy::Boss(_) | Enemy::ShieldedBoss(_) => true,
+            _ => false
+        }
+    }
+}
 
 pub struct BulletBase<'a>(pub Entity<'a>, pub bool);
 
@@ -200,12 +298,12 @@ impl<'a> Projectile<'a>{
     }
 
     fn animate_common(mut base: &mut BulletBase, enemies: &mut Vec<Enemy>, mut player: &mut Entity) -> Option<DeathReason>{
+        let bbox = Self::get_bb_base(base);
         let &mut BulletBase(ent, team) = &mut base;
         if *team {
-            for e in enemies.iter_mut() {
-                if ent.pos[0] - BULLET_SIZE < e.pos[0] + ENEMY_SIZE && e.pos[0] - ENEMY_SIZE < ent.pos[0] + BULLET_SIZE &&
-                    ent.pos[1] - BULLET_SIZE < e.pos[1] + ENEMY_SIZE && e.pos[1] - ENEMY_SIZE < ent.pos[1] + BULLET_SIZE {
-                    e.health -= ent.health;
+            for enemy in enemies.iter_mut() {
+                if enemy.test_hit(bbox) {
+                    enemy.damage(ent.health);
                     ent.health = 0;
                     break;
                 }
@@ -225,7 +323,8 @@ impl<'a> Projectile<'a>{
             Projectile::Bullet(base) => base,
             Projectile::Missile{base, target, trail} => {
                 if *target == 0 {
-                    let best = enemies.iter().fold((0, 1e5), |bestpair, e| {
+                    let best = enemies.iter().fold((0, 1e5), |bestpair, enemy| {
+                        let e = enemy.get_base();
                         let dist = vec2_len(vec2_sub(base.0.pos, e.pos));
                         if dist < MISSILE_DETECTION_RANGE && dist < bestpair.1 {
                             (e.id, dist)
@@ -236,7 +335,8 @@ impl<'a> Projectile<'a>{
                     });
                     *target = best.0;
                 }
-                else if let Some(target_ent) = enemies.iter().find(|e| e.id == *target) {
+                else if let Some(target_enemy) = enemies.iter().find(|e| e.get_id() == *target) {
+                    let target_ent = target_enemy.get_base();
                     let norm = vec2_normalized(vec2_sub(target_ent.pos, base.0.pos));
                     let desired_velo = vec2_scale(norm, MISSILE_SPEED);
                     let desired_diff = vec2_sub(desired_velo, base.0.velo);
@@ -265,6 +365,17 @@ impl<'a> Projectile<'a>{
                 base
             }
         }, enemies, player)
+    }
+
+    pub fn get_bb_base(base: &BulletBase) -> [f64; 4]{
+        let e = &base.0;
+        [e.pos[0] - BULLET_SIZE, e.pos[1] - BULLET_SIZE, e.pos[0] + BULLET_SIZE, e.pos[1] + BULLET_SIZE]
+    }
+
+    #[allow(dead_code)]
+    pub fn get_bb(&self) -> [f64; 4]{
+        let e = self.get_base();
+        Self::get_bb_base(e)
     }
 
     pub fn draw(&self, c: &Context, g: &mut G2d){
