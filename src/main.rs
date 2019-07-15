@@ -272,7 +272,7 @@ fn main() {
             for (i, enemy) in &mut ((&mut enemies).iter_mut().enumerate()) {
                 if !paused {
                     let killed = {
-                        if let Some(death_reason) = enemy.animate(time) {
+                        if let Some(death_reason) = enemy.animate(&mut id_gen, &mut bullets, &mut rng, time) {
                             to_delete.push(i);
                             if let DeathReason::Killed = death_reason {true} else{false}
                         }
@@ -290,13 +290,6 @@ fn main() {
                 }
                 enemy.draw(&context, graphics, &assets);
 
-                let x: i32 = rng.gen_range(0, if enemy.is_boss() { 16 } else { 64 });
-                if x == 0 {
-                    bullets.push(Projectile::EnemyBullet(BulletBase(Entity::new(
-                        &mut id_gen,
-                        enemy.get_base().pos,
-                        [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5]))))
-                }
             }
 
             for i in to_delete.iter().rev() {

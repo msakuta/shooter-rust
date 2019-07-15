@@ -4,6 +4,7 @@ use piston_window::draw_state::Blend;
 use std::ops::{Add, Mul};
 use piston_window::math::{rotate_radians, translate, scale};
 use vecmath::*;
+use rand::prelude::*;
 
 use super::consts::*;
 
@@ -358,7 +359,16 @@ impl Enemy{
         }
     }
 
-    pub fn animate(&mut self, time: u32) -> Option<DeathReason>{
+    pub fn animate(&mut self, id_gen: &mut u32, bullets: &mut Vec<Projectile>, rng: &mut rand::rngs::ThreadRng, time: u32) -> Option<DeathReason>{
+
+        let x: i32 = rng.gen_range(0, if self.is_boss() { 16 } else { 64 });
+        if x == 0 {
+            bullets.push(Projectile::EnemyBullet(BulletBase(Entity::new(
+                id_gen,
+                self.get_base().pos,
+                [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5]))))
+        }
+
         match self {
             Enemy::Enemy1(ref mut base) | Enemy::Boss(ref mut base) => base.0.animate(),
             Enemy::ShieldedBoss(ref mut boss) => {
