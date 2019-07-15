@@ -160,6 +160,47 @@ impl Entity{
     }
 }
 
+#[test]
+fn test_death_reason() {
+    let mut id_gen: u32 = 0;
+
+    // Tests for killed
+    let mut ent = Entity::new(&mut id_gen, [10., 20.], [1., 2., ]).health(0);
+    assert!(if let Some(DeathReason::Killed) = ent.animate() { true } else { false });
+
+    // Tests for out of range on left edge
+    let mut ent2 = Entity::new(&mut id_gen, [0., 20.], [-1., 6.]).health(10);
+    assert!(if let Some(DeathReason::RangeOut) = ent2.animate() { true } else { false });
+
+    // Allow incoming entity even if it's out of range
+    let mut ent3 = Entity::new(&mut id_gen, [-1., 20.], [1., 6.]).health(10);
+    assert!(if let None = ent3.animate() { true } else { false });
+
+    // Tests for out of range on right edge
+    let mut ent4 = Entity::new(&mut id_gen, [WIDTH as f64, 20.], [1., 6.]).health(10);
+    assert!(if let Some(DeathReason::RangeOut) = ent4.animate() { true } else { false });
+
+    // Allow incoming entity even if it's out of range
+    let mut ent5 = Entity::new(&mut id_gen, [WIDTH as f64 + 1., 20.], [-1., 6.]).health(10);
+    assert!(if let None = ent5.animate() { true } else { false });
+
+    // Tests for out of range on top edge
+    let mut ent6 = Entity::new(&mut id_gen, [20., 0.], [1., -1.]).health(10);
+    assert!(if let Some(DeathReason::RangeOut) = ent6.animate() { true } else { false });
+
+    // Allow incoming entity even if it's out of range
+    let mut ent7 = Entity::new(&mut id_gen, [20., -1.], [1., 1.]).health(10);
+    assert!(if let None = ent7.animate() { true } else { false });
+
+    // Tests for out of range on bottom edge
+    let mut ent4 = Entity::new(&mut id_gen, [20., HEIGHT as f64], [10., 1.]).health(10);
+    assert!(if let Some(DeathReason::RangeOut) = ent4.animate() { true } else { false });
+
+    // Allow incoming entity even if it's out of range
+    let mut ent5 = Entity::new(&mut id_gen, [20., HEIGHT as f64 + 1.], [-1., -1.]).health(10);
+    assert!(if let None = ent5.animate() { true } else { false });
+}
+
 pub struct Player{
     pub base: Entity,
     pub score: u32,
@@ -216,6 +257,21 @@ impl Player{
         self.score / 256
     }
 }
+
+#[test]
+fn test_player_hit() {
+    let mut id_gen: u32 = 0;
+
+    // Tests for killed
+    let ent = Entity::new(&mut id_gen, [10., 20.], [1., 2., ]).health(0);
+
+    let mut player = Player::new(Entity::new(&mut id_gen, [10. + ENEMY_SIZE + 0.5, 20.], [0., 1.]));
+    assert!(if let Some(DeathReason::HitPlayer) = ent.hits_player(&player.base) { true } else { false });
+
+    player.base.pos[0] += BULLET_SIZE;
+    assert!(if let None = ent.hits_player(&player.base) { true } else { false });
+}
+
 
 pub struct ShieldedBoss{
     pub base: Entity,
