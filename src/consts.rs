@@ -12,3 +12,7 @@ pub const BULLET_SIZE: f64 = 8.;
 pub const BULLET_SPEED: f64 = 5.;
 pub const MISSILE_SPEED: f64 = 3.;
 pub const LIGHT_WIDTH: f64 = 3.;
+
+pub const LIGHTNING_ACCEL: f64 = 8.0;
+pub const LIGHTNING_FEEDBACK: f64 = 0.1;
+pub const LIGHTNING_VERTICES: u32 = 32;
