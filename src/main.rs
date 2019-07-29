@@ -134,8 +134,9 @@ fn main() {
                 let shoot_period = if let Weapon::Bullet = weapon { 5 } else { 50 };
 
                 if Weapon::Bullet == weapon || Weapon::Missile == weapon {
-                    if key_shoot && time % shoot_period == 0 {
+                    if key_shoot && player.cooldown == 0 {
                         let level = player.power_level() as i32;
+                        player.cooldown += shoot_period;
                         for i in -1-level..2+level {
                             let speed = if let Weapon::Bullet = weapon { BULLET_SPEED } else { MISSILE_SPEED };
                             let mut ent = Entity::new(&mut id_gen, player.base.pos, [i as f64, -speed])
@@ -151,6 +152,12 @@ fn main() {
                                 bullets.push(Projectile::Missile{base: BulletBase(ent), target: 0, trail: vec!()})
                             }
                         }
+                    }
+                    if player.cooldown < 1 {
+                        player.cooldown = 0;
+                    }
+                    else{
+                        player.cooldown -= 1;
                     }
                 }
                 else if Weapon::Light == weapon && key_shoot {
