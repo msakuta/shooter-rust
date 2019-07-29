@@ -196,7 +196,7 @@ fn main() {
                     for _ in 0..nmax {
                         // Use the same seed twice to reproduce random sequence
                         let seed = {
-                            let mut seed: <SmallRng as SeedableRng>::Seed = [0u8; 16];
+                            let mut seed: <SmallRng as SeedableRng>::Seed = Default::default();
                             rng.fill_bytes(&mut seed);
                             seed
                         };
