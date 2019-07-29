@@ -360,14 +360,15 @@ impl Enemy{
         }
     }
 
-    pub fn animate(&mut self, id_gen: &mut u32, bullets: &mut Vec<Projectile>, rng: &mut rand::rngs::ThreadRng, time: u32) -> Option<DeathReason>{
+    pub fn animate(&mut self, id_gen: &mut u32, bullets: &mut std::collections::HashMap<u32, Projectile>, rng: &mut rand::rngs::ThreadRng, time: u32) -> Option<DeathReason>{
 
         let x: i32 = rng.gen_range(0, if self.is_boss() { 16 } else { 64 });
         if x == 0 {
-            bullets.push(Projectile::EnemyBullet(BulletBase(Entity::new(
+            let eb = Projectile::EnemyBullet(BulletBase(Entity::new(
                 id_gen,
                 self.get_base().pos,
-                [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5]))))
+                [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5])));
+            bullets.insert(eb.get_id(), eb);
         }
 
         match self {
@@ -444,6 +445,10 @@ impl Projectile{
     //         &mut Projectile::Missile(base, _) => &mut base
     //     }
     // }
+
+    pub fn get_id(&self) -> u32{
+        self.get_base().0.id
+    }
 
     pub fn get_type(&self) -> &str{
         match &self{

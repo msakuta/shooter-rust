@@ -8,6 +8,7 @@ extern crate rand;
 use piston_window::*;
 use rand::prelude::*;
 use piston_window::draw_state::Blend;
+use std::collections::HashMap;
 
 mod consts;
 mod entity;
@@ -48,7 +49,7 @@ fn main() {
 
     let mut items = Vec::<Item>::new();
 
-    let mut bullets = Vec::<Projectile>::new();
+    let mut bullets = HashMap::new();
 
     let mut tent = Vec::<TempEntity>::new();
 
@@ -145,12 +146,12 @@ fn main() {
                             if let Weapon::Bullet = weapon {
                                 shots_bullet += 1;
                                 ent = ent.blend(Blend::Add);
-                                bullets.push(Projectile::Bullet(BulletBase(ent)))
+                                bullets.insert(ent.id, Projectile::Bullet(BulletBase(ent)));
                             }
                             else{
                                 shots_missile += 1;
                                 ent = ent.health(5);
-                                bullets.push(Projectile::Missile{base: BulletBase(ent), target: 0, trail: vec!()})
+                                bullets.insert(ent.id, Projectile::Missile{base: BulletBase(ent), target: 0, trail: vec!()});
                             }
                         }
                     }
@@ -369,10 +370,11 @@ fn main() {
 
             to_delete.clear();
 
-            for (i,b) in &mut bullets.iter_mut().enumerate() {
+            let mut bullets_to_delete: Vec<u32> = Vec::new();
+            for (i,b) in &mut bullets.iter_mut() {
                 if !paused {
                     if let Some(death_reason) = b.animate_bullet(&mut enemies, &mut player.base) {
-                        to_delete.push(i);
+                        bullets_to_delete.push(*i);
 
                         let base = b.get_base();
 
@@ -399,12 +401,16 @@ fn main() {
                 b.draw(&context, graphics, &assets);
             }
 
-            for i in to_delete.iter().rev() {
-                let b = bullets.remove(*i);
-                println!("Deleted {} id={}, {} / {}", b.get_type(), b.get_base().0.id, *i, bullets.len());
+            for i in bullets_to_delete.iter() {
+                if let Some(b) = bullets.remove(i) {
+                    println!("Deleted {} id={}, {} / {}", b.get_type(), b.get_base().0.id, *i, bullets.len());
+                }
+                else{
+                    debug_assert!(false, "All keys must exist in bullets");
+                }
             }
 
-            to_delete.clear();
+            bullets_to_delete.clear();
 
             for (i, e) in &mut ((&mut tent).iter_mut().enumerate()) {
                 if !paused {
