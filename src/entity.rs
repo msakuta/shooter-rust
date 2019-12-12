@@ -314,8 +314,7 @@ impl Enemy{
     }
 
     pub fn get_base_mut(&mut self) -> &mut EnemyBase{
-        let mref: &mut Self = self;
-        match mref {
+        match self {
             Enemy::Enemy1(ref mut base) | Enemy::Boss(ref mut base) => base,
             Enemy::ShieldedBoss(ref mut boss) => &mut boss.base
         }
