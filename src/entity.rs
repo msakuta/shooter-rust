@@ -16,6 +16,7 @@ pub struct Assets{
     pub player_tex: G2dTexture,
     pub shield_tex: G2dTexture,
     pub ebullet_tex: G2dTexture,
+    pub phasebullet_tex: G2dTexture,
     pub bullet_tex: G2dTexture,
     pub missile_tex: G2dTexture,
     pub explode_tex: G2dTexture,
@@ -51,6 +52,7 @@ impl Assets{
             player_tex: load_texture("player.png"),
             shield_tex: load_texture("shield.png"),
             ebullet_tex: load_texture("ebullet.png"),
+            phasebullet_tex: load_texture("phasebullet.png"),
             bullet_tex: load_texture("bullet.png"),
             missile_tex: load_texture("missile.png"),
             explode_tex: load_texture("explode.png"),
@@ -361,13 +363,32 @@ impl Enemy{
 
     pub fn animate(&mut self, id_gen: &mut u32, bullets: &mut std::collections::HashMap<u32, Projectile>, rng: &mut rand::rngs::ThreadRng, time: u32) -> Option<DeathReason>{
 
-        let x: i32 = rng.gen_range(0, if self.is_boss() { 16 } else { 64 });
-        if x == 0 {
-            let eb = Projectile::EnemyBullet(BulletBase(Entity::new(
-                id_gen,
-                self.get_base().pos,
-                [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5])));
-            bullets.insert(eb.get_id(), eb);
+        if self.is_boss() {
+            let x: i32 = rng.gen_range(0, 256);
+            if x == 0 {
+                use std::f64::consts::PI;
+                let bullet_count = 16;
+                let phase_offset = rng.gen::<f64>() * PI;
+                for i in 0..bullet_count {
+                    let angle = 2. * PI * i as f64 / bullet_count as f64 + phase_offset;
+                    let eb = Projectile::new_phase(BulletBase(Entity::new(
+                        id_gen,
+                        self.get_base().pos,
+                        vec2_scale([angle.cos(), angle.sin()], 1.))
+                        .rotation(angle as f32)));
+                    bullets.insert(eb.get_id(), eb);
+                }
+            }
+        }
+        else{
+            let x: i32 = rng.gen_range(0, 64);
+            if x == 0 {
+                let eb = Projectile::EnemyBullet(BulletBase(Entity::new(
+                    id_gen,
+                    self.get_base().pos,
+                    [rng.gen::<f64>() - 0.5, rng.gen::<f64>() - 0.5])));
+                bullets.insert(eb.get_id(), eb);
+            }
         }
 
         match self {
@@ -423,6 +444,11 @@ pub struct BulletBase(pub Entity);
 pub enum Projectile{
     Bullet(BulletBase),
     EnemyBullet(BulletBase),
+    PhaseBullet{
+        base: BulletBase,
+        velo: [f64; 2],
+        phase: f64,
+    },
     Missile{base: BulletBase, target: u32, trail: Vec<[f64; 2]>}
 }
 
@@ -432,9 +458,15 @@ const MISSILE_TRAIL_LENGTH: usize = 20;
 const MISSILE_DAMAGE: i32 = 5;
 
 impl Projectile{
+    pub fn new_phase(base: BulletBase) -> Projectile{
+        let velo = base.0.velo;
+        Projectile::PhaseBullet{base, velo, phase: 0.}
+    }
+
     pub fn get_base<'b>(&'b self) -> &'b BulletBase{
         match &self {
             &Projectile::Bullet(base) | &Projectile::EnemyBullet(base) => base,
+            &Projectile::PhaseBullet{base, ..} => base,
             &Projectile::Missile{base, target: _, trail: _} => base
         }
     }
@@ -452,7 +484,8 @@ impl Projectile{
     pub fn get_type(&self) -> &str{
         match &self{
             &Projectile::Bullet(_) | &Projectile::EnemyBullet(_) => "Bullet",
-            &Projectile::Missile{..} => "Missile"
+            &Projectile::PhaseBullet{..} => "PhaseBullet",
+            &Projectile::Missile{..} => "Missile",
         }
     }
 
@@ -486,6 +519,11 @@ impl Projectile{
             Projectile::EnemyBullet(base) => {
                 Self::animate_enemy_bullet(base, enemies, player)
             },
+            Projectile::PhaseBullet{base, velo, phase} => {
+                base.0.velo = vec2_scale(*velo, (phase.sin() + 1.) / 2.);
+                *phase += 0.02 * std::f64::consts::PI;
+                Self::animate_enemy_bullet(base, enemies, player)
+            }
             Projectile::Missile{base, target, trail} => {
                 if *target == 0 {
                     let best = enemies.iter_mut().fold((0, 1e5, None), |bestpair, enemy| {
@@ -569,6 +607,7 @@ impl Projectile{
         self.get_base().0.draw_tex(c, g, match self {
             Projectile::Bullet(_) => &assets.bullet_tex,
             Projectile::EnemyBullet(_) => &assets.ebullet_tex,
+            Projectile::PhaseBullet{..} => &assets.phasebullet_tex,
             Projectile::Missile{..} => &assets.missile_tex,
         });
     }
