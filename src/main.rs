@@ -32,7 +32,6 @@ use crate::entity::{
 
 
 fn main() {
-    use rand::Rng;
     let mut time = 0;
     let mut disptime = 0;
     let opengl = OpenGL::V3_2;
@@ -203,7 +202,7 @@ fn main() {
 
                         // Lambda to call the same lightning sequence twice, first pass for detecting hit enemy
                         // and second pass for rendering.
-                        let lightning = |seed: &<SmallRng as SeedableRng>::Seed, length: u32, f: &mut FnMut(&[f64; 4]) -> bool| {
+                        let lightning = |seed: &<SmallRng as SeedableRng>::Seed, length: u32, f: &mut dyn FnMut(&[f64; 4]) -> bool| {
                             let mut rng2 = SmallRng::from_seed(*seed);
                             let mut a = [player.base.pos[0], player.base.pos[1], 0., -16.];
                             for i in 0..length {
