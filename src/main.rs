@@ -245,7 +245,7 @@ fn main() {
 
             if !game_over {
                 if player.invtime == 0 || disptime % 2 == 0 {
-                    player.base.draw_tex(&context, graphics, &assets.player_tex);
+                    player.base.draw_tex(&context, graphics, &assets.player_tex, None);
                 }
             }
 
@@ -277,11 +277,13 @@ fn main() {
                 let dice = 256;
                 let wave = time % wave_period;
                 if wave < wave_period * 3 / 4 {
-                    let (enemy_count, boss_count, shielded_boss_count) = enemies.iter().fold((0, 0, 0),
-                        |c, e| match e {
-                            Enemy::Enemy1(_) => (c.0 + 1, c.1, c.2),
-                            Enemy::Boss(_) => (c.0, c.1 + 1, c.2),
-                            Enemy::ShieldedBoss(_) => (c.0, c.1, c.2 + 1)
+                    let [enemy_count, boss_count, shielded_boss_count, spiral_count]
+                         = enemies.iter().fold([0; 4],
+                        |mut c, e| match e {
+                            Enemy::Enemy1(_) => {c[0] += 1; c},
+                            Enemy::Boss(_) => {c[1] += 1; c},
+                            Enemy::ShieldedBoss(_) => {c[2] += 1; c},
+                            Enemy::SpiralEnemy(_) => {c[3] += 1; c},
                         });
                     let gen_amount = player.difficulty_level() * 4 + 8;
                     let mut i = rng.gen_range(0, dice);
@@ -289,10 +291,11 @@ fn main() {
                         let weights = [
                             if enemy_count < 128 { if player.score < 1024 { 64 } else { 16 } } else { 0 },
                             if boss_count < 32 { 4 } else { 0 },
-                            if shielded_boss_count < 32 { std::cmp::min(4, player.difficulty_level()) } else { 0 }];
+                            if shielded_boss_count < 32 { std::cmp::min(4, player.difficulty_level()) } else { 0 },
+                            if spiral_count < 4 { 4 } else { 0 }];
                         let allweights = weights.iter().fold(0, |sum, x| sum + x);
                         let accum = {
-                            let mut accum = [0; 3];
+                            let mut accum = [0; 4];
                             let mut accumulator = 0;
                             for (i,e) in weights.iter().enumerate() {
                                 accumulator += e;
@@ -315,20 +318,19 @@ fn main() {
                                 }
                                 _ => panic!("RNG returned out of range")
                             };
-                            enemies.push(if dice < accum[0] {
-                                Enemy::Enemy1(EnemyBase::new(&mut id_gen, pos, velo)
-                                .health(3))
+                            if let Some(x) = accum.iter().position(|x| dice < *x) {
+                                enemies.push(match x {
+                                    0 => Enemy::Enemy1(EnemyBase::new(&mut id_gen, pos, velo)
+                                        .health(3)),
+                                    1 => Enemy::Boss(EnemyBase::new(&mut id_gen, pos, velo)
+                                        .health(64)),
+                                    2 => Enemy::ShieldedBoss(ShieldedBoss::new(
+                                            &mut id_gen,
+                                            pos,
+                                            velo)),
+                                    _ => Enemy::new_spiral(&mut id_gen, pos, velo),
+                                });
                             }
-                            else if dice < accum[1] {
-                                Enemy::Boss(EnemyBase::new(&mut id_gen, pos, velo)
-                                .health(64))
-                            }
-                            else {
-                                Enemy::ShieldedBoss(ShieldedBoss::new(
-                                    &mut id_gen,
-                                    pos,
-                                    velo))
-                            });
                         }
                         i += rng.gen_range(0, dice);
                     }
@@ -349,7 +351,7 @@ fn main() {
                         player.score += if enemy.is_boss() { 10 } else { 1 };
                         if rng.gen_range(0, 100) < 20 {
                             let ent = Entity::new(&mut id_gen, enemy.get_base().pos, [0., 1.]);
-                            items.push(if enemy.is_boss() { Item::PowerUp10(ent) } else { Item::PowerUp(ent) });
+                            items.push(enemy.drop_item(ent));
                         }
                         continue;
                     }
@@ -363,7 +365,8 @@ fn main() {
                 println!("Deleted Enemy {} id={}: {} / {}", match dead {
                     Enemy::Enemy1(_) => "enemy",
                     Enemy::Boss(_) => "boss",
-                    Enemy::ShieldedBoss(_) => "ShieldedBoss"
+                    Enemy::ShieldedBoss(_) => "ShieldedBoss",
+                    Enemy::SpiralEnemy(_) => "SpiralEnemy",
                 }, dead.get_id(), *i, enemies.len());
             }
 
